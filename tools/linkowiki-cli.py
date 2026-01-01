@@ -302,7 +302,7 @@ class RichSessionShell:
         
         # If the last turn was just displayed (tracked by last_displayed_turn),
         # don't show it again in the panel
-        if len(self.conversation_history) > 0 and self.last_displayed_turn == len(self.conversation_history) - 1:
+        if self.last_displayed_turn == len(self.conversation_history) - 1:
             history_to_show = self.conversation_history[-6:-1] if len(self.conversation_history) > 5 else self.conversation_history[:-1]
 
         for turn in history_to_show:
@@ -524,9 +524,10 @@ class RichSessionShell:
         table.add_column("Description", style="dim")
         
         for idx, option in enumerate(options, 1):
-            label = option.label if hasattr(option, 'label') else str(option)
-            description = option.description if hasattr(option, 'description') else ""
-            table.add_row(str(idx), label, description or "")
+            # Access Pydantic model fields directly
+            label = option.label
+            description = option.description if option.description else ""
+            table.add_row(str(idx), label, description)
         
         panel = Panel(
             table,

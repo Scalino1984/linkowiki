@@ -75,13 +75,14 @@ def run_ai_streaming(prompt: str, files: dict, session: dict = None):
     """
     Run AI with streaming output.
     
-    This is a generator that yields a StreamedRunResult object.
-    The caller should use it to stream text and then access the final result.
+    Returns a stream context manager from pydantic-ai's run_stream().
+    The caller should use it to access streaming results and final structured output.
     
-    Usage:
-        stream = run_ai_streaming(prompt, files, session)
-        # Stream is the StreamedRunResult object
-        # Access stream methods to get text chunks and final result
+    Note: When using structured output types (like AIResult), streaming is complex.
+    Consider using run_ai() for reliable access to all structured fields.
+    
+    Returns:
+        Stream context manager from agent.run_stream()
     """
     if session is None:
         from tools.session.manager import load_session
