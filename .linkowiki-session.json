@@ -1,18 +1,11 @@
 {
-  "id": "2026-01-01T18:18:32",
+  "active_provider_id": "test-provider",
   "write": true,
-  "cwd": "/home/astier/Projekte/linkowiki",
-  "started_by": "astier",
-  "history": [
-    "hallo",
-    "hallo",
-    "text",
-    "/attach",
-    "/files",
-    "erstelle ein neues wiki aus examples/pydanticai_v2_examples.py und zeige mir ein fertiges wiki mit pfad"
-  ],
-  "files": {},
-  "changes": [],
-  "pending_actions": [],
-  "active_provider_id": "openai-gpt5-text"
+  "pending_actions": [
+    {
+      "type": "write",
+      "path": "test.txt",
+      "content": "test content"
+    }
+  ]
 }

@@ -75,7 +75,14 @@ def run_ai_streaming(prompt: str, files: dict, session: dict = None):
     """
     Run AI with streaming output.
     
-    Yields text chunks as they arrive.
+    Returns a stream context manager from pydantic-ai's run_stream().
+    The caller should use it to access streaming results and final structured output.
+    
+    Note: When using structured output types (like AIResult), streaming is complex.
+    Consider using run_ai() for reliable access to all structured fields.
+    
+    Returns:
+        Stream context manager from agent.run_stream()
     """
     if session is None:
         from tools.session.manager import load_session
@@ -106,8 +113,9 @@ def run_ai_streaming(prompt: str, files: dict, session: dict = None):
         system_prompt=get_wiki_system_prompt()
     )
     
-    # Stream response
-    for chunk in agent.run_stream(full_prompt):
-        yield chunk
+    # Return the stream context manager
+    # The caller should handle it properly
+    return agent.run_stream(full_prompt)
+
 
 
