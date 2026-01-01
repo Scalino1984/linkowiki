@@ -7,8 +7,9 @@ import os
 import sys
 import signal
 import subprocess
+import re
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 from datetime import datetime
 
 # Add project root to path
@@ -28,6 +29,7 @@ from rich.text import Text
 from rich.style import Style
 from rich import box
 from rich.columns import Columns
+from rich.rule import Rule
 
 # Prompt toolkit for advanced input
 try:
@@ -42,7 +44,7 @@ except ImportError:
 
 # Project imports
 from tools.session.manager import load_session, start_session, add_history, save_session
-from tools.ai.assistant import run_ai, Action
+from tools.ai.assistant import run_ai, run_ai_streaming, Action
 
 
 class ProfessionalCompleter(Completer):
@@ -55,7 +57,10 @@ class ProfessionalCompleter(Completer):
         ("/attach", "📎 Attach file to context"),
         ("/files", "📁 List attached files"),
         ("/clear", "🧹 Clear conversation"),
+        ("/search", "🔍 Search conversation history"),
         ("/exit", "🚪 Exit shell"),
+        ("/stream on", "🌊 Enable streaming output"),
+        ("/stream off", "⏸️  Disable streaming output"),
         ("apply", "✅ Apply pending actions"),
         ("reject", "❌ Reject pending actions"),
     ]
@@ -82,6 +87,19 @@ class ProfessionalCompleter(Completer):
         except:
             self.files_cache = []
 
+    def get_file_icon(self, file_path: str) -> str:
+        """Get emoji icon for file type"""
+        if file_path.endswith('.py'):
+            return '🐍'
+        elif file_path.endswith(('.js', '.ts', '.jsx', '.tsx')):
+            return '💛'
+        elif file_path.endswith(('.md', '.txt')):
+            return '📝'
+        elif file_path.endswith(('.json', '.yaml', '.yml')):
+            return '⚙️'
+        else:
+            return '📄'
+
     def get_completions(self, document, complete_event):
         text = document.text_before_cursor
 
@@ -92,18 +110,7 @@ class ProfessionalCompleter(Completer):
 
             for file_path in self.files_cache:
                 if file_path.startswith(file_prefix):
-                    # Determine file type emoji
-                    if file_path.endswith('.py'):
-                        emoji = '🐍'
-                    elif file_path.endswith(('.js', '.ts', '.jsx', '.tsx')):
-                        emoji = '💛'
-                    elif file_path.endswith(('.md', '.txt')):
-                        emoji = '📝'
-                    elif file_path.endswith(('.json', '.yaml', '.yml')):
-                        emoji = '⚙️'
-                    else:
-                        emoji = '📄'
-
+                    emoji = self.get_file_icon(file_path)
                     yield Completion(
                         file_path,
                         start_position=-len(file_prefix),
@@ -132,6 +139,8 @@ class RichSessionShell:
         self.conversation_history: List[Dict[str, Any]] = []
         self.is_processing = False
         self.current_task = None
+        self.attached_files: Dict[str, str] = {}  # filename -> content
+        self.streaming_enabled = True  # Enable streaming by default
 
         # Terminal info
         self.update_terminal_size()
@@ -148,6 +157,34 @@ class RichSessionShell:
         size = self.console.size
         self.term_width = size.width
         self.term_height = size.height
+
+    def _read_file(self, filepath: str) -> Optional[str]:
+        """Read file content from disk"""
+        try:
+            file_path = BASE_DIR / filepath
+            if file_path.exists() and file_path.is_file():
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    return f.read()
+        except Exception as e:
+            self.console.print(f"[red]Error reading file {filepath}: {str(e)}[/red]")
+        return None
+
+    def _extract_and_load_files(self, text: str) -> Tuple[str, Dict[str, str]]:
+        """Extract @file mentions and load their content automatically"""
+        # Find all @file mentions
+        file_pattern = r'@([^\s]+)'
+        matches = re.findall(file_pattern, text)
+        
+        loaded_files = {}
+        for filepath in matches:
+            if filepath not in self.attached_files:
+                content = self._read_file(filepath)
+                if content:
+                    loaded_files[filepath] = content
+                    self.attached_files[filepath] = content
+                    self.console.print(f"[dim]📎 Loaded: {filepath}[/dim]")
+        
+        return text, loaded_files
 
     def _get_git_info(self) -> Dict[str, str]:
         """Get git branch and status"""
@@ -222,8 +259,8 @@ class RichSessionShell:
             title_align="left"
         )
 
-    def _create_status_footer(self) -> Panel:
-        """Create status footer panel"""
+    def _create_status_footer(self) -> Group:
+        """Create status footer with proper separator line"""
         # Calculate context usage (placeholder for now)
         context_usage = 0.13
         requests_remaining = 98.2
@@ -245,11 +282,10 @@ class RichSessionShell:
 
         table.add_row(left, middle, right)
 
-        return Panel(
-            table,
-            border_style="dim",
-            box=box.SIMPLE,
-            padding=(0, 1)
+        # Use Rule for proper separator line (not text-based)
+        return Group(
+            Rule(style="dim"),
+            table
         )
 
     def _create_conversation_panel(self) -> Optional[Panel]:
@@ -300,11 +336,15 @@ class RichSessionShell:
         commands = [
             ("/help", "Show all commands"),
             ("/model", "Show/change AI model"),
-            ("/attach <file>", "Attach file to context"),
+            ("/attach <file>", "Manually attach file to context"),
             ("/files", "List attached files"),
             ("/clear", "Clear conversation"),
+            ("/search <text>", "Search conversation history"),
+            ("/stream on/off", "Enable/disable streaming output"),
             ("/exit", "Exit shell"),
-            ("@<file>", "Mention a file in your question"),
+            ("@<file>", "Auto-load file (e.g., @src/main.py)"),
+            ("apply", "Apply pending actions"),
+            ("reject", "Reject pending actions"),
         ]
 
         for cmd, desc in commands:
@@ -363,8 +403,11 @@ class RichSessionShell:
         self.console.print()
 
     def process_ai_request(self, user_input: str):
-        """Process AI request with live updates"""
+        """Process AI request with live updates and automatic file loading"""
         self.is_processing = True
+
+        # Extract and load files automatically
+        processed_input, loaded_files = self._extract_and_load_files(user_input)
 
         # Add user message to history
         self.conversation_history.append({
@@ -372,6 +415,30 @@ class RichSessionShell:
             "content": user_input
         })
 
+        try:
+            # Add to session history
+            add_history(user_input)
+
+            # Merge loaded files with session files
+            all_files = {**self.session.get("files", {}), **self.attached_files}
+
+            if self.streaming_enabled:
+                # Streaming mode
+                self._process_ai_streaming(processed_input, all_files)
+            else:
+                # Non-streaming mode
+                self._process_ai_standard(processed_input, all_files)
+
+        except Exception as e:
+            self.console.print(f"[red]Error:[/red] {str(e)}")
+            import traceback
+            self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
+
+        finally:
+            self.is_processing = False
+
+    def _process_ai_standard(self, user_input: str, all_files: Dict[str, str]):
+        """Process AI request without streaming"""
         # Show processing indicator
         with Progress(
             SpinnerColumn(),
@@ -381,59 +448,96 @@ class RichSessionShell:
         ) as progress:
             task = progress.add_task("Processing your request...", total=None)
 
-            try:
-                # Add to session history
-                add_history(user_input)
+            # Call AI
+            result = run_ai(user_input, all_files, session=self.session)
 
-                # Call AI
-                result = run_ai(user_input, self.session.get("files", {}), session=self.session)
+            # Add assistant response to history
+            self.conversation_history.append({
+                "role": "assistant",
+                "content": result.message
+            })
 
-                # Add assistant response to history
-                self.conversation_history.append({
-                    "role": "assistant",
-                    "content": result.message
-                })
+            # Display response with proper formatting
+            self.console.print()
+            self._display_ai_response(result.message)
+            self.console.print()
 
-                # Display response
-                self.console.print()
-                if "```" in result.message or "#" in result.message:
-                    # Render as markdown
-                    self.console.print(Panel(
-                        Markdown(result.message),
-                        border_style="magenta",
-                        box=box.ROUNDED,
-                        title="[bold]Assistant[/bold]",
-                        title_align="left"
-                    ))
-                else:
-                    self.console.print(f"[bold magenta]←[/bold magenta] {result.message}")
+            # Show actions if any
+            if result.actions:
+                self._display_actions(result.actions)
+                self.session["pending_actions"] = [a.dict() for a in result.actions]
+                save_session(self.session)
 
-                self.console.print()
+    def _process_ai_streaming(self, user_input: str, all_files: Dict[str, str]):
+        """Process AI request with streaming output"""
+        self.console.print()
+        self.console.print("[bold magenta]←[/bold magenta] ", end="")
+        
+        full_response = ""
+        try:
+            # Stream the response
+            for chunk in run_ai_streaming(user_input, all_files, session=self.session):
+                # Safely handle streaming chunks
+                try:
+                    if hasattr(chunk, 'data') and chunk.data is not None:
+                        text = str(chunk.data)
+                        self.console.print(text, end="")
+                        full_response += text
+                except (AttributeError, TypeError) as e:
+                    # Log and skip malformed chunks (AttributeError, TypeError)
+                    # Other exceptions will propagate
+                    continue
+        except Exception as e:
+            # Fall back to standard mode if streaming fails
+            self.console.print(f"\n[yellow]Streaming failed, using standard mode...[/yellow]")
+            self._process_ai_standard(user_input, all_files)
+            return
+        
+        self.console.print()  # New line after streaming
+        self.console.print()
+        
+        # Add to history
+        self.conversation_history.append({
+            "role": "assistant",
+            "content": full_response
+        })
 
-                # Show actions if any
-                if result.actions:
-                    self._display_actions(result.actions)
-                    self.session["pending_actions"] = [a.dict() for a in result.actions]
-                    save_session(self.session)
-
-            except Exception as e:
-                self.console.print(f"[red]Error:[/red] {str(e)}")
-                import traceback
-                self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
-
-            finally:
-                self.is_processing = False
+    def _display_ai_response(self, message: str):
+        """Display AI response with proper markdown and syntax highlighting"""
+        if "```" in message or "#" in message:
+            # Render as markdown with syntax highlighting
+            self.console.print(Panel(
+                Markdown(message),
+                border_style="magenta",
+                box=box.ROUNDED,
+                title="[bold]Assistant[/bold]",
+                title_align="left"
+            ))
+        else:
+            # Simple text response
+            self.console.print(f"[bold magenta]←[/bold magenta] {message}")
 
     def _display_actions(self, actions: List[Action]):
-        """Display pending actions beautifully"""
+        """Display pending actions with better diff visualization"""
         table = Table(show_header=True, box=box.SIMPLE_HEAD)
-        table.add_column("Type", style="yellow")
-        table.add_column("Path", style="cyan")
+        table.add_column("Type", style="yellow", width=8)
+        table.add_column("Path", style="cyan", width=30)
         table.add_column("Description", style="dim")
 
         for action in actions:
+            action_type = action.type.upper()
+            # Color-code action types
+            if action_type == "WRITE":
+                type_styled = f"[green]{action_type}[/green]"
+            elif action_type == "EDIT":
+                type_styled = f"[yellow]{action_type}[/yellow]"
+            elif action_type == "DELETE":
+                type_styled = f"[red]{action_type}[/red]"
+            else:
+                type_styled = action_type
+            
             table.add_row(
-                action.type.upper(),
+                type_styled,
                 str(action.path),
                 action.description or ""
             )
@@ -448,6 +552,38 @@ class RichSessionShell:
 
         self.console.print(panel)
         self.console.print()
+        
+        # Show preview of content for edits/writes
+        for action in actions[:3]:  # Show max 3 previews
+            if action.content and action.type in ("write", "edit"):
+                self._show_action_preview(action)
+
+    def _show_action_preview(self, action: Action):
+        """Show preview of action content"""
+        content = action.content
+        if len(content) > 500:
+            content = content[:500] + "\n... (truncated)"
+        
+        # Detect language for syntax highlighting
+        lang = "text"
+        if action.path.endswith('.py'):
+            lang = "python"
+        elif action.path.endswith(('.js', '.ts')):
+            lang = "javascript"
+        elif action.path.endswith('.json'):
+            lang = "json"
+        elif action.path.endswith(('.yaml', '.yml')):
+            lang = "yaml"
+        
+        syntax = Syntax(content, lang, theme="monokai", line_numbers=True)
+        
+        panel = Panel(
+            syntax,
+            title=f"[dim]Preview: {action.path}[/dim]",
+            border_style="dim",
+            box=box.MINIMAL
+        )
+        self.console.print(panel)
 
     def run(self):
         """Run the interactive shell"""
@@ -461,11 +597,13 @@ class RichSessionShell:
         session_prompt = None
         if PROMPT_TOOLKIT_AVAILABLE:
             history_file = BASE_DIR / ".rich_session_history"
+            
             session_prompt = PromptSession(
                 history=FileHistory(str(history_file)),
                 completer=ProfessionalCompleter(),
                 complete_while_typing=True,
                 auto_suggest=AutoSuggestFromHistory(),
+                multiline=False,  # Single line input
             )
 
         # Show welcome
@@ -482,19 +620,28 @@ class RichSessionShell:
                 if conv_panel:
                     self.console.print(conv_panel)
 
-                # Show footer
+                # Show footer with proper separator
                 self.console.print(self._create_status_footer())
-
-                # Get input
+                
+                # Input section with separators
                 self.console.print()
+                
+                # Top separator before input
+                self.console.print(Rule(style="dim cyan"))
+                
+                # Get input
                 if session_prompt:
                     user_input = session_prompt.prompt(
-                        self._create_input_prompt(),
+                        HTML('<ansi-cyan><b>❯</b></ansi-cyan> '),
                         enable_suspend=True
                     ).strip()
                 else:
-                    self.console.print(self._create_input_prompt(), end="")
+                    self.console.print("[cyan]❯[/cyan] ", end="")
                     user_input = input().strip()
+                
+                # Bottom separator after input
+                self.console.print(Rule(style="dim cyan"))
+                self.console.print()
 
                 if not user_input:
                     continue
@@ -518,6 +665,32 @@ class RichSessionShell:
                 if user_input == "/model":
                     self.show_model_info()
                     continue
+                
+                if user_input == "/files":
+                    self.show_attached_files()
+                    continue
+                
+                if user_input.startswith("/attach "):
+                    filepath = user_input[8:].strip()
+                    self.attach_file(filepath)
+                    continue
+                
+                if user_input.startswith("/stream "):
+                    arg = user_input[8:].strip().lower()
+                    if arg == "on":
+                        self.streaming_enabled = True
+                        self.console.print("[green]✓[/green] Streaming enabled")
+                    elif arg == "off":
+                        self.streaming_enabled = False
+                        self.console.print("[green]✓[/green] Streaming disabled")
+                    else:
+                        self.console.print("[red]Usage: /stream on|off[/red]")
+                    continue
+                
+                if user_input.startswith("/search "):
+                    query = user_input[8:].strip()
+                    self.search_conversation(query)
+                    continue
 
                 # AI request
                 self.process_ai_request(user_input)
@@ -527,6 +700,84 @@ class RichSessionShell:
                 break
             except Exception as e:
                 self.console.print(f"[red]Error:[/red] {str(e)}")
+
+    def attach_file(self, filepath: str):
+        """Manually attach a file to context"""
+        content = self._read_file(filepath)
+        if content:
+            self.attached_files[filepath] = content
+            self.console.print(f"[green]✓[/green] Attached: {filepath}")
+        else:
+            self.console.print(f"[red]✗[/red] Could not attach: {filepath}")
+
+    def show_attached_files(self):
+        """Show currently attached files"""
+        if not self.attached_files:
+            self.console.print("[dim]No files attached[/dim]")
+            return
+        
+        table = Table(show_header=True, box=box.SIMPLE)
+        table.add_column("File", style="cyan")
+        table.add_column("Size", style="dim", justify="right")
+        
+        for filepath, content in self.attached_files.items():
+            size = len(content)
+            size_str = f"{size:,} bytes"
+            if size > 1024:
+                size_str = f"{size/1024:.1f} KB"
+            table.add_row(filepath, size_str)
+        
+        panel = Panel(
+            table,
+            title="[bold]Attached Files[/bold]",
+            border_style="cyan",
+            box=box.ROUNDED
+        )
+        self.console.print(panel)
+        self.console.print()
+
+    def search_conversation(self, query: str):
+        """Search through conversation history"""
+        if not self.conversation_history:
+            self.console.print("[dim]No conversation history to search[/dim]")
+            return
+        
+        results = []
+        for i, turn in enumerate(self.conversation_history):
+            role = turn.get("role", "user")
+            content = turn.get("content", "")
+            
+            if query.lower() in content.lower():
+                results.append((i, role, content))
+        
+        if not results:
+            self.console.print(f"[dim]No results found for: {query}[/dim]")
+            return
+        
+        # Display results
+        table = Table(show_header=True, box=box.SIMPLE)
+        table.add_column("#", style="dim", width=4)
+        table.add_column("Role", style="cyan", width=10)
+        table.add_column("Content", style="white")
+        
+        for idx, role, content in results[:10]:  # Show max 10 results
+            # Truncate content
+            preview = content[:100] + "..." if len(content) > 100 else content
+            # Highlight query in preview (case-insensitive)
+            preview = re.sub(f'({re.escape(query)})', r'[yellow]\1[/yellow]', preview, flags=re.IGNORECASE)
+            
+            role_styled = "[cyan]User[/cyan]" if role == "user" else "[magenta]Assistant[/magenta]"
+            table.add_row(str(idx), role_styled, preview)
+        
+        panel = Panel(
+            table,
+            title=f"[bold]Search Results for '{query}'[/bold]",
+            border_style="cyan",
+            box=box.ROUNDED,
+            subtitle=f"[dim]Found {len(results)} result(s)[/dim]"
+        )
+        self.console.print(panel)
+        self.console.print()
 
 
 def main():

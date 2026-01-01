@@ -8,25 +8,30 @@ Enterprise-grade CLI tool mit Rich TUI, Live-Updates, und modernen Features auf 
 
 ### 🎨 **Professional User Interface**
 - **Auto-Resizing Layout** - Passt sich automatisch an Terminal-Größe an (kein Zerreißen mehr!)
-- **Rich TUI Components** - Professionelle Panels, Tables und Layouts
+- **Rich TUI Components** - Professionelle Panels, Tables und Layouts mit echten Line-Drawing Characters
+- **Proper Separator Lines** - Verwendet Rich Rule für echte horizontale Linien (nicht text-basiert!)
 - **Live Progress Indicators** - Echtzeit-Feedback während AI-Processing
 - **Syntax Highlighting** - Automatisches Highlighting für Code-Blöcke
 - **Markdown Rendering** - Schöne Darstellung von AI-Antworten
+- **Streaming Output** - Live AI-Antworten wie bei Copilot/Claude
 
 ### 🧠 **Intelligent Features**
 - **Auto-Completion**
   - Slash-Commands mit `/`
   - File-Mentions mit `@`
   - Smart Suggestions basierend auf Kontext
+- **Automatic File Reading** - Files werden automatisch gelesen bei `@file` Mentions!
 - **File Browser** - Git-tracked Files mit Emoji-Icons
-- **History Search** - Ctrl+R für History-Suche
+- **History Search** - Ctrl+R für History-Suche + `/search` Command
 - **Context-Aware** - Zeigt aktuelle Context-Usage und API-Limits
+- **Conversation Search** - Suche in der Conversation-History mit `/search`
 
 ### 📊 **Status & Monitoring**
 - **Live Task Status** - Sieht den AI-Processing-Status in Echtzeit
 - **Context Usage Bar** - Zeigt % bis Truncation
 - **Requests Remaining** - API-Limit Tracking
 - **Git Integration** - Zeigt Branch und Dirty-Status
+- **File Attachments** - Zeigt angehängte Dateien mit `/files`
 
 ### ⌨️ **Keyboard Shortcuts**
 - `Ctrl+C` - Exit
@@ -56,6 +61,9 @@ pip install rich textual typer questionary pyfiglet prompt_toolkit
 
 ```bash
 # New Rich-based shell (RECOMMENDED)
+python tools/linkowiki-cli.py
+
+# Or use the alias
 python tools/rich_session_shell.py
 
 # Classic copilot CLI
@@ -72,19 +80,23 @@ linkowiki-admin session shell
    ❯ Hello! Can you help me refactor my code?
    ```
 
-2. **Mention files:**
+2. **Mention files - they are automatically read!:**
    ```
    ❯ @src/main.py explain this function
    ```
    - Type `@` and see all git-tracked files
    - Use Tab/↓ to navigate
    - Files show with emoji icons (🐍 Python, 💛 JS, etc.)
+   - **Files are automatically loaded - kein manuelles Lesen nötig!**
 
 3. **Use slash commands:**
    ```
    ❯ /help              # Show all commands
    ❯ /model             # Show current model
-   ❯ /attach file.py    # Attach file to context
+   ❯ /attach file.py    # Manually attach file to context
+   ❯ /files             # Show attached files
+   ❯ /search query      # Search conversation history
+   ❯ /stream on         # Enable streaming output
    ❯ /clear             # Clear conversation
    ```
 
@@ -98,18 +110,19 @@ linkowiki-admin session shell
 
 ## 🎯 Professional Features in Detail
 
-### **1. Auto-Resizing Layout**
+### **1. Auto-Resizing Layout mit echten Linien**
 
-**Problem Solved:** Trennlinien werden beim Resize nicht mehr "zerrissen"
+**Problem Solved:** Trennlinien werden beim Resize nicht mehr "zerrissen" UND sind echte terminal lines!
 
 **How it works:**
 - Rich TUI automatisch re-rendert bei SIGWINCH
 - Layout passt sich dynamisch an aktuelle Terminal-Größe an
+- **Rich Rule** für echte horizontale Linien (keine Text-Characters wie "────")
 - Keine festen Breiten - alles ist responsive
 
 **Before:**
 ```
-────────────────────────────────────────  (80 chars)
+────────────────────────────────────────  (text-based, 80 chars)
 # Terminal resize auf 40 chars
 ────────────────────────────────
 ──────────────  (zerrissen!)
@@ -117,12 +130,45 @@ linkowiki-admin session shell
 
 **After:**
 ```
-────────────────────────────────────────  (80 chars)
+────────────────────────────────────────  (Rich Rule, auto-sized)
 # Terminal resize auf 40 chars
-────────────────────────────────────────  (40 chars - automatisch angepasst)
+────────────────────────────────────────  (automatically adjusted!)
 ```
 
-### **2. Live Progress Updates**
+### **2. Automatic File Reading**
+
+**Problem Solved:** Files müssen nicht manuell gelesen werden!
+
+**How it works:**
+- Beim Tippen von `@filename` wird die Datei automatisch erkannt
+- Datei wird vom Filesystem gelesen
+- Content wird automatisch an den AI-Kontext angehängt
+- User sieht: `📎 Loaded: filename`
+
+**Example:**
+```
+❯ @examples/pydanticai_v2_examples.py erstelle ein wiki
+📎 Loaded: examples/pydanticai_v2_examples.py
+
+← Assistant kann jetzt den Dateiinhalt lesen und verarbeiten!
+```
+
+### **3. Streaming Output**
+
+**Shows Real-Time AI Processing like Copilot/Claude:**
+```
+❯ Your question here
+
+← Response appears word-by-word in real-time...
+```
+
+**Toggle streaming:**
+```
+❯ /stream off   # Disable for complete responses
+❯ /stream on    # Enable for live output
+```
+
+### **4. Live Progress Updates**
 
 **Shows Real-Time AI Processing:**
 ```
@@ -134,7 +180,7 @@ linkowiki-admin session shell
 ● Implementing feature XYZ (Esc to cancel · 13.0 KiB)
 ```
 
-### **3. Markdown & Syntax Highlighting**
+### **5. Markdown & Syntax Highlighting**
 
 **AI Responses mit Code:**
 ```python
@@ -148,7 +194,7 @@ def hello_world():
 - ✅ Proper spacing
 - ✅ Professional look
 
-### **4. File Mentions with @**
+### **6. File Mentions with @ - Now with Auto-Loading!**
 
 ```
 ❯ @sr<TAB>
@@ -157,6 +203,9 @@ Suggestions:
 🐍 src/main.py
 🐍 src/utils.py
 📝 src/README.md
+
+# Select one and it's AUTOMATICALLY LOADED!
+📎 Loaded: src/main.py
 ```
 
 **File Type Icons:**
@@ -166,7 +215,7 @@ Suggestions:
 - ⚙️ Config (JSON/YAML)
 - 📄 Other Files
 
-### **5. Smart Slash Commands**
+### **7. Smart Slash Commands**
 
 ```
 ❯ /<TAB>
@@ -175,8 +224,35 @@ Suggestions:
 /model       🤖 Show/change AI model
 /attach      📎 Attach file to context
 /files       📁 List attached files
+/search      🔍 Search conversation history
+/stream      🌊 Toggle streaming output
 /clear       🧹 Clear conversation
 /exit        🚪 Exit shell
+```
+
+### **8. Conversation Search**
+
+```
+❯ /search error handling
+
+Search Results for 'error handling'
+┌───┬───────────┬──────────────────────────────────────┐
+│ # │ Role      │ Content                              │
+├───┼───────────┼──────────────────────────────────────┤
+│ 2 │ User      │ How to add error handling to...      │
+│ 3 │ Assistant │ For error handling, use try-catch... │
+└───┴───────────┴──────────────────────────────────────┘
+```
+
+### **9. Better Action Previews**
+
+**With Syntax Highlighting:**
+```python
+╭─ Preview: src/main.py ─────────────────╮
+│  1  def new_function():                 │
+│  2      """Added by AI"""               │
+│  3      return "Hello"                  │
+╰─────────────────────────────────────────╯
 ```
 
 ---
@@ -272,12 +348,17 @@ signal.signal(signal.SIGWINCH, self._handle_resize)
 | Feature | LinkoWiki Pro | Claude Code | GitHub Copilot |
 |---------|--------------|-------------|----------------|
 | Auto-Resize | ✅ | ✅ | ✅ |
+| Real Terminal Lines | ✅ (Rich Rule) | ✅ | ✅ |
 | Syntax Highlighting | ✅ | ✅ | ✅ |
 | Markdown Rendering | ✅ | ✅ | ✅ |
 | File Mentions (@) | ✅ | ✅ | ✅ |
+| **Auto File Reading** | ✅ **NEW!** | ✅ | ✅ |
+| Live Streaming Output | ✅ **NEW!** | ✅ | ✅ |
+| Conversation Search | ✅ **NEW!** | ✅ | ❌ |
 | Live Progress | ✅ | ✅ | ✅ |
 | Context Usage Bar | ✅ | ✅ | ✅ |
 | Git Integration | ✅ | ✅ | ✅ |
+| Action Previews | ✅ **NEW!** | ✅ | ✅ |
 | Custom AI Models | ✅ | ❌ | ❌ |
 | Local Deployment | ✅ | ❌ | ❌ |
 
