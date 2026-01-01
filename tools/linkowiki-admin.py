@@ -2,6 +2,7 @@
 import argparse
 import json
 import os
+import re
 import sys
 import shutil
 from pathlib import Path
@@ -58,10 +59,29 @@ class Colors:
     BG_BLUE = "\033[44m"
     BG_CYAN = "\033[46m"
 
+    # Accent
+    ACCENT = BRIGHT_MAGENTA
+
 
 def get_terminal_size():
     """Get terminal width and height"""
     return shutil.get_terminal_size(fallback=(80, 24))
+
+
+ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def strip_ansi(text: str) -> str:
+    return ANSI_RE.sub("", text)
+
+
+def visible_len(text: str) -> int:
+    return len(strip_ansi(text))
+
+
+def pad_to(text: str, width: int) -> str:
+    padding = max(width - visible_len(text), 0)
+    return f"{text}{' ' * padding}"
 
 
 def print_box(text, color=Colors.CYAN, prefix="", width=70):
@@ -167,8 +187,8 @@ def get_git_branch():
         return ""
 
 
-def print_copilot_header(session):
-    """Print Copilot-style header (path + branch + model)"""
+def build_claude_panel_lines(session, term_width):
+    """Build Claude-style panel header lines."""
     from tools.ai.providers import get_provider_registry
     
     # Ensure session has provider
@@ -179,9 +199,6 @@ def print_copilot_header(session):
     
     registry = get_provider_registry()
     provider = registry.get_provider(session.get("active_provider_id"))
-    
-    # Get terminal width
-    term_width, _ = get_terminal_size()
     
     # Shorten path
     cwd = os.getcwd()
@@ -194,22 +211,64 @@ def print_copilot_header(session):
     # Git branch
     git_branch = get_git_branch()
     
-    # Build left side: ~/path[ branch*]
-    left = short_cwd
-    if git_branch:
-        left += f"[ {git_branch}]"
-    
-    # Build right side: model-name (1x)
-    # Extract short model name
     model_short = provider.id.replace("openai-", "").replace("anthropic-", "")
-    right = f"{model_short} (1x)"
-    
-    # Calculate spacing
-    spacing = term_width - len(left) - len(right)
-    if spacing < 1:
-        spacing = 1
-    
-    print(f"{Colors.DIM}{left}{' ' * spacing}{right}{Colors.RESET}")
+    model_label = f"{Colors.DIM}{model_short} (1x){Colors.RESET}"
+    branch_label = f"{short_cwd}{f' [{git_branch}]' if git_branch else ''}"
+
+    inner_width = max(term_width - 2, 40)
+    content_width = inner_width - 2
+    lines = []
+    lines.append(f"{Colors.ACCENT}╭{'─' * inner_width}╮{Colors.RESET}")
+
+    title_left = f"{Colors.BRIGHT_WHITE}LinkoWiki Code{Colors.RESET} {Colors.DIM}Session{Colors.RESET}"
+    title_spacing = content_width - visible_len(title_left) - visible_len(model_label)
+    if title_spacing < 1:
+        title_spacing = 1
+    title_line = (
+        f"{Colors.ACCENT}│{Colors.RESET} "
+        f"{title_left}{' ' * title_spacing}{model_label}"
+        f" {Colors.ACCENT}│{Colors.RESET}"
+    )
+    lines.append(title_line)
+
+    left_lines = [
+        f"{Colors.BRIGHT_WHITE}Welcome back!{Colors.RESET}",
+        f"{Colors.DIM}Session ID: {session.get('id', 'unknown')}{Colors.RESET}",
+        f"{Colors.DIM}Mode: {'Write' if session.get('write') else 'Read-only'}{Colors.RESET}",
+        f"{Colors.DIM}Path: {branch_label}{Colors.RESET}",
+    ]
+    right_lines = [
+        f"{Colors.BRIGHT_WHITE}Tips for getting started{Colors.RESET}",
+        f"{Colors.DIM}Use /help to see commands{Colors.RESET}",
+        f"{Colors.DIM}Use /attach <file> to add context{Colors.RESET}",
+        f"{Colors.BRIGHT_WHITE}Recent activity{Colors.RESET}",
+        f"{Colors.DIM}{len(session.get('history', []))} messages so far{Colors.RESET}",
+    ]
+
+    left_width = (content_width - 1) // 2
+    right_width = content_width - 1 - left_width
+    max_lines = max(len(left_lines), len(right_lines))
+
+    for idx in range(max_lines):
+        left_text = left_lines[idx] if idx < len(left_lines) else ""
+        right_text = right_lines[idx] if idx < len(right_lines) else ""
+        left_padded = pad_to(left_text, left_width)
+        right_padded = pad_to(right_text, right_width)
+        lines.append(
+            f"{Colors.ACCENT}│{Colors.RESET} "
+            f"{left_padded}{Colors.ACCENT}│{Colors.RESET} "
+            f"{right_padded} {Colors.ACCENT}│{Colors.RESET}"
+        )
+
+    lines.append(f"{Colors.ACCENT}╰{'─' * inner_width}╯{Colors.RESET}")
+    return lines
+
+
+def print_copilot_header(session):
+    """Print Claude-style header panel."""
+    term_width, _ = get_terminal_size()
+    for line in build_claude_panel_lines(session, term_width):
+        print(line)
 
 
 def print_user_input(text):
@@ -371,7 +430,6 @@ def session_shell():
         
         # Print Copilot-style header
         print_copilot_header(s)
-        print_copilot_separator()
         print()
         
         # Print last content if any
@@ -381,6 +439,13 @@ def session_shell():
             print()
         
         # Print footer/separator/prompt at bottom
+        hint_lines = [
+            f"{Colors.DIM}Try \"/help\" for commands{Colors.RESET}",
+            f"{Colors.DIM}? for shortcuts{Colors.RESET}",
+        ]
+        for line in hint_lines:
+            print(f"  {line}")
+        print()
         print_copilot_separator()
         print_copilot_prompt()
         
@@ -1084,4 +1149,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

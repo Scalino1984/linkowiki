@@ -8,6 +8,7 @@ import sys
 import shutil
 import signal
 import time
+import re
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -23,6 +24,7 @@ class Colors:
     RED = "\033[31m"
     YELLOW = "\033[33m"
     BRIGHT_WHITE = "\033[97m"
+    ACCENT = "\033[95m"
 
 
 # Global for SIGINT handling
@@ -38,6 +40,22 @@ def clear_screen():
 def get_terminal_size():
     """Get terminal width and height"""
     return shutil.get_terminal_size(fallback=(120, 40))
+
+
+ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def strip_ansi(text: str) -> str:
+    return ANSI_RE.sub("", text)
+
+
+def visible_len(text: str) -> int:
+    return len(strip_ansi(text))
+
+
+def pad_to(text: str, width: int) -> str:
+    padding = max(width - visible_len(text), 0)
+    return f"{text}{' ' * padding}"
 
 
 def get_git_branch():
@@ -65,59 +83,102 @@ def get_git_branch():
         return ""
 
 
-def render_copilot_screen(session, content_lines=None):
-    """Render complete Copilot-style screen"""
-    term_width, _ = get_terminal_size()
-    
-    # Get session info
+def build_claude_panel_lines(session, term_width):
+    """Build Claude-style panel header lines."""
     from tools.ai.providers import get_provider_registry
     from tools.config import get_config
-    
+
     if "active_provider_id" not in session or not session.get("active_provider_id"):
         config = get_config()
         session["active_provider_id"] = config.default_provider
-    
+
     registry = get_provider_registry()
     provider = registry.get_provider(session.get("active_provider_id"))
-    
-    # Shorten CWD
+
     cwd = os.getcwd()
     home = os.path.expanduser("~")
-    if cwd.startswith(home):
-        short_cwd = "~" + cwd[len(home):]
-    else:
-        short_cwd = cwd
-    
-    # Git branch
+    short_cwd = "~" + cwd[len(home):] if cwd.startswith(home) else cwd
+
     git_branch = get_git_branch()
-    
-    # Build header
-    left = short_cwd
-    if git_branch:
-        left += f"[ {git_branch}]"
-    
+    branch_label = f"{short_cwd}{f' [{git_branch}]' if git_branch else ''}"
+
     model_short = provider.id.replace("openai-", "").replace("anthropic-", "")
-    right = f"{model_short} (1x)"
-    
-    spacing = term_width - len(left) - len(right)
-    if spacing < 1:
-        spacing = 1
-    
-    # Clear and render
+    model_label = f"{Colors.DIM}{model_short} (1x){Colors.RESET}"
+
+    inner_width = max(term_width - 2, 60)
+    content_width = inner_width - 2
+    lines = []
+    lines.append(f"{Colors.ACCENT}╭{'─' * inner_width}╮{Colors.RESET}")
+
+    title_left = f"{Colors.BRIGHT_WHITE}LinkoWiki Code{Colors.RESET} {Colors.DIM}Session{Colors.RESET}"
+    title_spacing = content_width - visible_len(title_left) - visible_len(model_label)
+    if title_spacing < 1:
+        title_spacing = 1
+    lines.append(
+        f"{Colors.ACCENT}│{Colors.RESET} "
+        f"{title_left}{' ' * title_spacing}{model_label}"
+        f" {Colors.ACCENT}│{Colors.RESET}"
+    )
+
+    left_lines = [
+        f"{Colors.BRIGHT_WHITE}Welcome back!{Colors.RESET}",
+        f"{Colors.DIM}Session ID: {session.get('id', 'unknown')}{Colors.RESET}",
+        f"{Colors.DIM}Mode: {'Write' if session.get('write') else 'Read-only'}{Colors.RESET}",
+        f"{Colors.DIM}Path: {branch_label}{Colors.RESET}",
+    ]
+    right_lines = [
+        f"{Colors.BRIGHT_WHITE}Tips for getting started{Colors.RESET}",
+        f"{Colors.DIM}Use /help to see commands{Colors.RESET}",
+        f"{Colors.DIM}Use /attach <file> to add context{Colors.RESET}",
+        f"{Colors.BRIGHT_WHITE}Recent activity{Colors.RESET}",
+        f"{Colors.DIM}{len(session.get('history', []))} messages so far{Colors.RESET}",
+    ]
+
+    left_width = (content_width - 1) // 2
+    right_width = content_width - 1 - left_width
+    max_lines = max(len(left_lines), len(right_lines))
+
+    for idx in range(max_lines):
+        left_text = left_lines[idx] if idx < len(left_lines) else ""
+        right_text = right_lines[idx] if idx < len(right_lines) else ""
+        left_padded = pad_to(left_text, left_width)
+        right_padded = pad_to(right_text, right_width)
+        lines.append(
+            f"{Colors.ACCENT}│{Colors.RESET} "
+            f"{left_padded}{Colors.ACCENT}│{Colors.RESET} "
+            f"{right_padded} {Colors.ACCENT}│{Colors.RESET}"
+        )
+
+    lines.append(f"{Colors.ACCENT}╰{'─' * inner_width}╯{Colors.RESET}")
+    return lines
+
+
+def render_copilot_screen(session, content_lines=None):
+    """Render complete Claude-style screen"""
+    term_width, _ = get_terminal_size()
+
     clear_screen()
-    
-    # Header
-    print(f"{Colors.DIM}{left}{' ' * spacing}{right}{Colors.RESET}")
-    print(f"{Colors.DIM}{'─' * term_width}{Colors.RESET}")
-    
+
+    for line in build_claude_panel_lines(session, term_width):
+        print(line)
+    print()
+
     # Content area (if any)
     if content_lines:
         print()
         for line in content_lines:
             print(line)
         print()
-    
-    # Prompt (without bottom separator yet)
+
+    hints = [
+        f"{Colors.DIM}Try \"/help\" for commands{Colors.RESET}",
+        f"{Colors.DIM}? for shortcuts{Colors.RESET}",
+    ]
+    for line in hints:
+        print(f"  {line}")
+    print()
+
+    print(f"{Colors.DIM}{'─' * term_width}{Colors.RESET}")
     print(f"> ", end="", flush=True)
 
 
@@ -156,53 +217,8 @@ def simple_shell():
         return
     
     content = []
-    term_width, _ = get_terminal_size()
-    
     while True:
-        # Clear screen and render header
-        clear_screen()
-        
-        # Get session info
-        from tools.ai.providers import get_provider_registry
-        from tools.config import get_config
-        
-        if "active_provider_id" not in s or not s.get("active_provider_id"):
-            config = get_config()
-            s["active_provider_id"] = config.default_provider
-        
-        registry = get_provider_registry()
-        provider = registry.get_provider(s.get("active_provider_id"))
-        
-        # Build header
-        cwd = os.getcwd()
-        home = os.path.expanduser("~")
-        short_cwd = "~" + cwd[len(home):] if cwd.startswith(home) else cwd
-        
-        git_branch = get_git_branch()
-        left = short_cwd
-        if git_branch:
-            left += f"[ {git_branch}]"
-        
-        model_short = provider.id.replace("openai-", "").replace("anthropic-", "")
-        right = f"{model_short} (1x)"
-        
-        spacing = term_width - len(left) - len(right)
-        if spacing < 1:
-            spacing = 1
-        
-        # Print header
-        print(f"{Colors.DIM}{left}{' ' * spacing}{right}{Colors.RESET}")
-        print(f"{Colors.DIM}{'─' * term_width}{Colors.RESET}")
-        
-        # Print content if any
-        if content:
-            print()
-            for line in content:
-                print(line)
-            print()
-        
-        # Print prompt
-        print(f"> ", end="", flush=True)
+        render_copilot_screen(s, content)
         
         try:
             cmd = input().strip()
