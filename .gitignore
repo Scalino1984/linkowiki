@@ -1,11 +1,30 @@
-*.pyc
-*.swp
-log/
-ve/
-share/vim/.vim/
-share/vim/.viminfo
-typescript
-venv/
-bin/upstream
-upstream/
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
 .venv/
+venv/
+ENV/
+env/
+
+# Session files
+.linkowiki-session.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
