@@ -1,41 +1,392 @@
 
 
-![cheat.sh logo](http://cheat.sh/files/big-logo-v2-fixed.png)
-
 # LinkoWiki
 
-AI-powered wiki management system with professional CLI interface.
+🚀 **AI-gestütztes Wiki-Management-System mit professioneller CLI-Oberfläche**
 
-## 🤖 AI System Prompt Configuration
+LinkoWiki kombiniert die Leistungsfähigkeit von PydanticAI mit einer modernen Terminal-Benutzeroberfläche, um ein intelligentes, interaktives Wiki-System zu schaffen. Basierend auf cheat.sh, erweitert es die Funktionalität um KI-gestützte Assistenz, automatisches File-Management und professionelle Entwickler-Tools.
 
-The AI assistant's behavior is controlled by a system prompt stored in:
-```
-AI_SYSTEM_PROMPT.md
-```
+---
 
-This file contains the complete instructions for the AI assistant and can be modified to customize:
-- Response style and tone
-- Wiki structure conventions
-- Interaction patterns
-- Output formatting rules
+## ✨ Hauptmerkmale
 
-**To customize the AI behavior:**
-1. Edit `AI_SYSTEM_PROMPT.md` in the project root
-2. Changes take effect on next CLI session start
-3. The file is version-controlled for team collaboration
+### 🧠 **Intelligente AI-Assistenz**
+- **PydanticAI-Integration** - Nutzt Claude, OpenAI oder andere LLMs für intelligente Interaktionen
+- **Proaktive Tool-Nutzung** - AI nutzt automatisch verfügbare Tools (Wiki-Suche, Git-Status, File-Reading)
+- **Kontextbewusst** - Versteht Projektstruktur und Git-Historie
+- **Streaming-Antworten** - Echtzeit-Ausgabe wie bei Claude/Copilot
+- **Smart Memory** - Behält Konversationskontext und File-Attachments
 
-## 📚 Professional CLI
+### 🎨 **Professional CLI Interface**
+- **Rich TUI** - Moderne Terminal-Oberfläche mit Panels, Tables und Syntax-Highlighting
+- **Auto-Resize** - Passt sich dynamisch an Terminal-Größe an
+- **Live-Updates** - Echtzeit-Fortschrittsanzeigen und Streaming-Output
+- **File Mentions** - Automatisches File-Reading mit `@dateiname` Syntax
+- **Command Auto-Completion** - Intelligente Vervollständigung für Slash-Commands und Files
+- **Git-Integration** - Branch-Status, Dirty-State und Recent Changes
 
-See [PROFESSIONAL_CLI.md](PROFESSIONAL_CLI.md) for details on the professional CLI features.
+### 📚 **Wiki-Management**
+- **Strukturiertes Wiki** - Kategorien-basierte Organisation (z.B. `linux/systemctl`)
+- **Wiki-Tools** - Suche, Struktur-Übersicht, Recent Changes
+- **Markdown-Format** - Volle Markdown-Unterstützung mit Code-Highlighting
+- **Verlinkung** - Automatische Cross-References zwischen Einträgen
 
-**Quick Start:**
+### 🔧 **Developer Features**
+- **Action System** - Vorschau und Bestätigung von File-Änderungen
+- **Multi-File Support** - Mehrere Files gleichzeitig bearbeiten
+- **Project Context** - Automatische README-, Config- und Source-Code-Analyse
+- **Session Management** - Persistente Konversationen und Context-Speicherung
+
+---
+
+## 🚀 Schnellstart
+
+### Installation
+
 ```bash
+# Repository klonen
+git clone https://github.com/Scalino1984/linkowiki.git
+cd linkowiki
+
+# Dependencies installieren
+pip install -r requirements.txt
+
+# Oder mit virtualenv
+python -m venv .venv
+source .venv/bin/activate  # Linux/Mac
+.venv\Scripts\activate     # Windows
+pip install -r requirements.txt
+```
+
+### Konfiguration
+
+1. **API-Keys einrichten:**
+```bash
+# .env Datei erstellen (aus .env.example)
+cp .env.example .env
+
+# API-Keys eintragen
+echo "ANTHROPIC_API_KEY=your-key-here" >> .env
+# oder
+echo "OPENAI_API_KEY=your-key-here" >> .env
+```
+
+2. **AI System Prompt anpassen (optional):**
+```bash
+# Editiere AI_SYSTEM_PROMPT.md für individuelles AI-Verhalten
+vim AI_SYSTEM_PROMPT.md
+```
+
+### Start
+
+```bash
+# Professional CLI starten
 python tools/linkowiki-cli.py
+
+# Oder direkt mit dem Rich Shell
+python tools/rich_session_shell.py
+
+# Legacy Admin Interface
+python tools/linkowiki-admin.py session shell
 ```
 
 ---
 
+## 📖 Verwendung
+
+### Grundlegende Interaktion
+
+```bash
+# Wiki-Eintrag erstellen
+❯ Erstelle einen Wiki-Eintrag für Docker
+
+# File automatisch laden und analysieren
+❯ @README.md erkläre mir dieses Projekt
+
+# Wiki durchsuchen
+❯ Suche nach "systemctl" im Wiki
+
+# Projekt dokumentieren
+❯ Dokumentiere die Projektstruktur
+```
+
+### Slash-Commands
+
+```bash
+/help              # Zeige alle verfügbaren Commands
+/model             # Zeige/wechsle AI-Model
+/attach file.py    # Datei zum Context hinzufügen
+/files             # Zeige angehängte Dateien
+/search query      # Durchsuche Konversations-Historie
+/stream on/off     # Toggle Streaming-Output
+/clear             # Konversation leeren
+/exit              # CLI beenden
+```
+
+### File Mentions
+
+```bash
+# @ triggert File-Autocomplete
+❯ @src/main.py
+
+# Files werden automatisch geladen
+📎 Loaded: src/main.py
+
+# Mehrere Files gleichzeitig
+❯ @config.yaml @src/app.py erkläre die Konfiguration
+```
+
+### Action Previews
+
+```python
+# AI schlägt File-Änderungen vor
+╭─ Pending Actions ───────────────────╮
+│ WRITE  src/new_feature.py           │
+│ EDIT   src/main.py                  │
+╰─────────────────────────────────────╯
+
+❯ apply    # Änderungen ausführen
+❯ reject   # Änderungen ablehnen
+```
+
+---
+
+## 🎯 Erweiterte Features
+
+### Auto-Assist Modus
+
+LinkoWiki bietet mehrere Auto-Assist Features für erhöhte Produktivität:
+
+```python
+# Auto-Read: Files werden automatisch bei Mention gelesen
+❯ @package.json  # Wird automatisch geladen
+
+# Auto-Exec: Actions werden automatisch ausgeführt (mit Bestätigung)
+❯ /autoexec on   # Aktiviere automatische Ausführung
+
+# Proactive Suggestions: AI schlägt nächste Schritte vor
+# Nach jedem Schritt werden relevante Optionen angeboten
+```
+
+Siehe [AUTO_ASSIST_FEATURES.md](AUTO_ASSIST_FEATURES.md) für Details.
+
+### Custom AI Model
+
+```bash
+# Model wechseln
+❯ /model set claude-opus-4
+❯ /model set gpt-4-turbo
+
+# Verfügbare Models anzeigen
+❯ /model list
+
+# Model-Info
+❯ /model info
+```
+
+### Context Management
+
+```bash
+# Angehängte Files anzeigen
+❯ /files
+📎 src/main.py (15.2 KB)
+📎 config.yaml (1.3 KB)
+
+# Context-Usage monitoren
+Context: 13% (2.5K / 20K tokens)
+Remaining: 98 requests
+
+# Context leeren aber Conversation behalten
+❯ /clear
+```
+
+### Wiki-Tools
+
+Die AI hat direkten Zugriff auf Wiki-Tools:
+
+```python
+# Tools werden automatisch genutzt, wenn relevant:
+- search_wiki(query)          # Wiki durchsuchen
+- get_wiki_structure()        # Struktur anzeigen
+- get_recent_changes(limit)   # Letzte Änderungen
+- read_file(filepath)         # Projektdateien lesen
+- list_files(pattern)         # Files auflisten (glob)
+- git_status()                # Git-Status
+```
+
+---
+
+## 🏗️ Architektur
+
+### Komponenten
+
+```
+linkowiki/
+├── tools/
+│   ├── linkowiki-cli.py          # Haupteingang Professional CLI
+│   ├── rich_session_shell.py     # Rich TUI Shell
+│   ├── ai/
+│   │   ├── assistant.py          # AI-Assistenz Layer
+│   │   └── agents/
+│   │       └── wiki_agent.py     # Wiki-spezifischer Agent
+│   ├── memory/
+│   │   └── context.py            # Context-Memory System
+│   └── session/
+│       └── manager.py            # Session-Persistenz
+├── lib/
+│   ├── adapter/                  # cheat.sh Adapter
+│   └── frontend/                 # Web Frontend (optional)
+├── wiki/                         # Wiki-Einträge
+├── AI_SYSTEM_PROMPT.md          # AI-Verhalten Konfiguration
+└── requirements.txt             # Python Dependencies
+```
+
+### Tech Stack
+
+| Komponente | Technologie | Zweck |
+|------------|------------|-------|
+| **AI Framework** | PydanticAI | Type-safe AI Agent Framework |
+| **LLM Providers** | Anthropic, OpenAI | Claude, GPT-4 Integration |
+| **TUI** | Rich, Textual | Professional Terminal UI |
+| **Input** | prompt_toolkit | Auto-Completion, History |
+| **Wiki Base** | cheat.sh | Grundlegendes Wiki-System |
+| **Markdown** | markdown, Pygments | Rendering, Syntax-Highlighting |
+
+---
+
+## 🆚 Vergleich mit anderen Tools
+
+| Feature | LinkoWiki | Claude Code | GitHub Copilot | Cursor |
+|---------|-----------|-------------|----------------|--------|
+| **Local Deployment** | ✅ | ❌ | ❌ | ❌ |
+| **Custom AI Models** | ✅ | ❌ | ❌ | ⚠️ |
+| **Wiki Management** | ✅ | ❌ | ❌ | ❌ |
+| **Auto File Reading** | ✅ | ✅ | ✅ | ✅ |
+| **Streaming Output** | ✅ | ✅ | ✅ | ✅ |
+| **Git Integration** | ✅ | ✅ | ✅ | ✅ |
+| **Action Previews** | ✅ | ✅ | ✅ | ✅ |
+| **Offline Usage** | ✅ | ❌ | ❌ | ❌ |
+| **Open Source** | ✅ | ❌ | ❌ | ❌ |
+
+---
+
+## 📚 Dokumentation
+
+- **[PROFESSIONAL_CLI.md](PROFESSIONAL_CLI.md)** - Detaillierte CLI-Dokumentation
+- **[AUTO_ASSIST_FEATURES.md](AUTO_ASSIST_FEATURES.md)** - Auto-Assist Features Beschreibung
+- **[AI_SYSTEM_PROMPT.md](AI_SYSTEM_PROMPT.md)** - AI-Verhalten Konfiguration
+- **[IMPLEMENTATION_DETAILS.md](IMPLEMENTATION_DETAILS.md)** - Technische Implementation
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** - Beitrags-Richtlinien
+
+---
+
+## 🐳 Docker Deployment
+
+```bash
+# Mit Docker Compose starten
+docker-compose up
+
+# Service verfügbar unter
+http://localhost:8002
+
+# Oder manuell bauen
+docker build -t linkowiki .
+docker run -p 8002:8002 linkowiki
+```
+
+---
+
+## 🔧 Entwicklung
+
+### Setup
+
+```bash
+# Dev Dependencies
+pip install pytest black pylint
+
+# Tests ausführen
+pytest tests/
+
+# Code formatieren
+black tools/ lib/
+
+# Linting
+pylint tools/ lib/
+```
+
+### Custom Tools hinzufügen
+
+```python
+# tools/ai/agents/custom_tool.py
+from pydantic_ai import Tool
+
+def my_custom_tool(query: str) -> str:
+    """Beschreibung für AI"""
+    # Implementation
+    return result
+
+# In wiki_agent.py registrieren
+tools = [search_wiki, get_wiki_structure, my_custom_tool]
+```
+
+---
+
+## 🤝 Contributing
+
+Contributions sind willkommen! Bitte beachte:
+
+1. Fork das Repository
+2. Erstelle einen Feature Branch (`git checkout -b feature/amazing-feature`)
+3. Commit deine Changes (`git commit -m 'Add amazing feature'`)
+4. Push zum Branch (`git push origin feature/amazing-feature`)
+5. Öffne einen Pull Request
+
+Siehe [CONTRIBUTING.md](CONTRIBUTING.md) für Details.
+
+---
+
+## 📄 Lizenz
+
+MIT License - siehe [LICENSE](LICENSE) Datei für Details.
+
+---
+
+## 🙏 Credits
+
+### Basiert auf
+- **[cheat.sh](https://cheat.sh)** - Community-driven cheat sheets
+- **[PydanticAI](https://github.com/pydantic/pydantic-ai)** - Type-safe AI Agent Framework
+
+### Inspiriert von
+- **Claude Code** (Anthropic)
+- **GitHub Copilot**
+- **Cursor AI**
+
+### Verwendet
+- [Rich](https://github.com/Textualize/rich) - Terminal UI Framework
+- [Prompt Toolkit](https://github.com/prompt-toolkit/python-prompt-toolkit) - Interactive CLI
+- [Anthropic API](https://www.anthropic.com) - Claude LLM
+- [OpenAI API](https://openai.com) - GPT Models
+
+---
+
+## 📞 Support
+
+- **Issues**: [GitHub Issues](https://github.com/Scalino1984/linkowiki/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/Scalino1984/linkowiki/discussions)
+
+---
+
+**Made with ❤️ for developers who love both AI and efficient CLIs**
+
+---
+
 # Original cheat.sh Documentation
+
+<details>
+<summary>Click to expand original cheat.sh documentation</summary>
+
+---
 
 Unified access to the best community driven cheat sheets repositories of the world.
 
@@ -924,3 +1275,5 @@ There are two cases, when you want to install *cheat.sh* locally:
 2. You want to use your own cheat sheets (additionally, or as a replacement).
 
 Installation process in described in details here: [cheat.sh standalone installation](doc/standalone.md)
+
+</details>

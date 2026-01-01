@@ -1,11 +1,11 @@
 {
-  "active_provider_id": "test-provider",
+  "id": "2026-01-01T20:35:49",
   "write": true,
-  "pending_actions": [
-    {
-      "type": "write",
-      "path": "test.txt",
-      "content": "test content"
-    }
-  ]
+  "cwd": "/home/astier/Projekte/linkowiki",
+  "started_by": "astier",
+  "history": [],
+  "files": {},
+  "changes": [],
+  "pending_actions": [],
+  "active_provider_id": "openai-gpt5-text"
 }
