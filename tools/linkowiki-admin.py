@@ -363,10 +363,24 @@ def session_shell():
 
     clear_screen()
     last_options = []
+    last_content = []
 
     while True:
-        # Print Copilot-style header and prompt
+        # Clear and render full screen
+        clear_screen()
+        
+        # Print Copilot-style header
         print_copilot_header(s)
+        print_copilot_separator()
+        print()
+        
+        # Print last content if any
+        if last_content:
+            for line in last_content:
+                print(line)
+            print()
+        
+        # Print footer/separator/prompt at bottom
         print_copilot_separator()
         print_copilot_prompt()
         
@@ -377,6 +391,7 @@ def session_shell():
             break
 
         if not cmd:
+            clear_screen()
             continue
 
         # Handle commands
@@ -385,11 +400,11 @@ def session_shell():
             break
         
         if cmd in ("/clear", "/cls"):
-            clear_screen()
+            last_content = []
             continue
 
         if cmd in ("help", "/help"):
-            print_copilot_separator()
+            last_content = []
             commands = [
                 ("/help", "Show help for interactive commands"),
                 ("/model", "Show current AI model"),
@@ -410,9 +425,9 @@ def session_shell():
                     spacing = 30 - len(cmd_name)
                     if spacing < 2:
                         spacing = 2
-                    print(f"  {Colors.BRIGHT_WHITE}{cmd_name}{Colors.RESET}{' ' * spacing}{Colors.DIM}{desc}{Colors.RESET}")
+                    last_content.append(f"  {Colors.BRIGHT_WHITE}{cmd_name}{Colors.RESET}{' ' * spacing}{Colors.DIM}{desc}{Colors.RESET}")
                 else:
-                    print()
+                    last_content.append("")
             continue
         
         if cmd == "/model":
@@ -420,12 +435,13 @@ def session_shell():
             registry = get_provider_registry()
             provider = registry.get_provider(s.get("active_provider_id"))
             
-            print_copilot_separator()
-            print(f"  {Colors.BRIGHT_WHITE}Model:{Colors.RESET} {provider.id}")
-            print(f"  {Colors.DIM}Provider:{Colors.RESET} {provider.provider}")
-            print(f"  {Colors.DIM}Type:{Colors.RESET} {'Reasoning' if provider.reasoning else 'Text'}")
+            last_content = [
+                f"  {Colors.BRIGHT_WHITE}Model:{Colors.RESET} {provider.id}",
+                f"  {Colors.DIM}Provider:{Colors.RESET} {provider.provider}",
+                f"  {Colors.DIM}Type:{Colors.RESET} {'Reasoning' if provider.reasoning else 'Text'}",
+            ]
             if provider.description:
-                print(f"  {Colors.DIM}{provider.description}{Colors.RESET}")
+                last_content.append(f"  {Colors.DIM}{provider.description}{Colors.RESET}")
             continue
         
         if cmd == "/model list":
@@ -433,19 +449,18 @@ def session_shell():
             registry = get_provider_registry()
             providers = registry.list_providers()
             
-            print_copilot_separator()
-            
+            last_content = []
             for provider_id, provider in providers.items():
                 is_active = (provider_id == s.get("active_provider_id"))
                 marker = f"{Colors.BRIGHT_WHITE}▌{Colors.RESET}" if is_active else " "
                 reasoning_tag = f"{Colors.YELLOW}[R]{Colors.RESET}" if provider.reasoning else ""
                 
-                print(f"{marker} {Colors.BRIGHT_WHITE}{provider_id}{Colors.RESET} {reasoning_tag}")
+                last_content.append(f"{marker} {Colors.BRIGHT_WHITE}{provider_id}{Colors.RESET} {reasoning_tag}")
                 if provider.description and is_active:
-                    print(f"  {Colors.DIM}{provider.description}{Colors.RESET}")
+                    last_content.append(f"  {Colors.DIM}{provider.description}{Colors.RESET}")
             
-            print()
-            print(f"  {Colors.DIM}Use /model set <id> to switch{Colors.RESET}")
+            last_content.append("")
+            last_content.append(f"  {Colors.DIM}Use /model set <id> to switch{Colors.RESET}")
             continue
         
         if cmd.startswith("/model set "):
