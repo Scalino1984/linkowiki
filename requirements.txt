@@ -24,6 +24,16 @@ markdown>=3.4.0
 # YAML Configuration
 pyyaml>=6.0.0
 
+# Professional CLI Tools & TUI Libraries
+prompt_toolkit>=3.0.0      # Advanced input with auto-completion
+rich>=13.7.0               # Professional terminal formatting & TUI
+textual>=0.47.0            # Modern TUI framework (optional advanced UI)
+typer>=0.9.0               # Modern CLI argument parsing
+questionary>=2.0.0         # Beautiful interactive prompts
+pyfiglet>=1.0.2            # ASCII art for headers
+pygments>=2.17.0           # Syntax highlighting (used by rich)
+click>=8.1.7               # CLI utilities
+
 # Original cheat.sh dependencies (if still needed)
 # Comment out if not using original cheat.sh functionality
 wheel

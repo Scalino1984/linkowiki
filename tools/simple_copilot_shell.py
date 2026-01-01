@@ -11,6 +11,17 @@ import time
 import re
 from pathlib import Path
 
+try:
+    from prompt_toolkit import PromptSession
+    from prompt_toolkit.completion import Completer, Completion
+    from prompt_toolkit.history import FileHistory
+    from prompt_toolkit.styles import Style
+    PROMPT_TOOLKIT_AVAILABLE = True
+except ImportError:
+    PROMPT_TOOLKIT_AVAILABLE = False
+    import readline
+    import atexit
+
 BASE_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BASE_DIR))
 
@@ -157,8 +168,8 @@ def render_copilot_screen(session, content_lines=None):
     """Render complete Claude-style screen"""
     term_width, _ = get_terminal_size()
 
-    clear_screen()
-
+    # Don't clear screen - preserve terminal history
+    print()
     for line in build_claude_panel_lines(session, term_width):
         print(line)
     print()
@@ -185,16 +196,16 @@ def render_copilot_screen(session, content_lines=None):
 def sigint_handler(signum, frame):
     """Handle Ctrl+C with double-press detection"""
     global _last_sigint_time, _sigint_count
-    
+
     current_time = time.time()
-    
+
     # Reset count if more than 2 seconds since last SIGINT
     if current_time - _last_sigint_time > 2.0:
         _sigint_count = 0
-    
+
     _sigint_count += 1
     _last_sigint_time = current_time
-    
+
     if _sigint_count >= 2:
         # Second Ctrl+C within 2 seconds - exit
         print(f"\n\n{Colors.DIM}Exiting...{Colors.RESET}\n")
@@ -205,27 +216,141 @@ def sigint_handler(signum, frame):
         raise KeyboardInterrupt
 
 
+# Available commands for completion
+COMMANDS = [
+    "/help", "/model", "/model list", "/model set",
+    "/clear", "/cls", "/exit", "/quit", "/attach",
+    "exit", "quit", "help"
+]
+
+COMMAND_DESCRIPTIONS = {
+    "/help": "Show help",
+    "/model": "Show current model",
+    "/model list": "List all models",
+    "/model set": "Switch model",
+    "/clear": "Clear screen",
+    "/cls": "Clear screen",
+    "/exit": "Exit shell",
+    "/quit": "Exit shell",
+    "/attach": "Attach file for context",
+    "exit": "Exit shell",
+    "quit": "Exit shell",
+    "help": "Show help",
+}
+
+
+if PROMPT_TOOLKIT_AVAILABLE:
+    class PromptToolkitCompleter(Completer):
+        """Auto-completion with arrow key selection for prompt_toolkit"""
+
+        def get_completions(self, document, complete_event):
+            """Yield completions for the current input"""
+            text = document.text_before_cursor
+
+            # Show all commands if we're at the beginning or after typing /
+            for cmd in COMMANDS:
+                if cmd.startswith(text):
+                    description = COMMAND_DESCRIPTIONS.get(cmd, "")
+                    yield Completion(
+                        cmd,
+                        start_position=-len(text),
+                        display=cmd,
+                        display_meta=description
+                    )
+
+
+class ReadlineCompleter:
+    """Tab completion for readline (fallback)"""
+
+    def __init__(self, options):
+        self.options = sorted(options)
+
+    def complete(self, text, state):
+        """Return the next possible completion for 'text'"""
+        if state == 0:
+            # First call: generate matches
+            if text:
+                self.matches = [cmd for cmd in self.options if cmd.startswith(text)]
+            else:
+                self.matches = self.options[:]
+
+        # Return match indexed by state
+        try:
+            return self.matches[state]
+        except IndexError:
+            return None
+
+
+def setup_readline():
+    """Configure readline for history and completion (fallback)"""
+    if PROMPT_TOOLKIT_AVAILABLE:
+        return  # prompt_toolkit handles this
+
+    # History file
+    history_file = BASE_DIR / ".copilot_history"
+
+    # Load history if it exists
+    if history_file.exists():
+        try:
+            readline.read_history_file(str(history_file))
+        except:
+            pass
+
+    # Set history length
+    readline.set_history_length(1000)
+
+    # Save history on exit
+    atexit.register(lambda: readline.write_history_file(str(history_file)))
+
+    # Setup tab completion
+    completer = ReadlineCompleter(COMMANDS)
+    readline.set_completer(completer.complete)
+    readline.parse_and_bind("tab: complete")
+
+    # Enable vi or emacs mode (emacs is default)
+    readline.parse_and_bind("set editing-mode emacs")
+
+
 def simple_shell():
     """Simple Copilot-style shell"""
     # Setup SIGINT handler
     signal.signal(signal.SIGINT, sigint_handler)
-    
+
     s = load_session()
     if not s:
         print(f"\n{Colors.RED}error: no active session{Colors.RESET}")
         print(f"{Colors.DIM}run 'linkowiki-admin session start' first{Colors.RESET}\n")
         return
-    
+
+    # Setup input method
+    if PROMPT_TOOLKIT_AVAILABLE:
+        history_file = BASE_DIR / ".copilot_history"
+        session = PromptSession(
+            history=FileHistory(str(history_file)),
+            completer=PromptToolkitCompleter(),
+            complete_while_typing=True,
+            enable_history_search=True,
+        )
+    else:
+        setup_readline()
+        session = None
+
     content = []
     while True:
         render_copilot_screen(s, content)
-        
+
         try:
-            cmd = input().strip()
-            
-            # Print separator AFTER input (on same line as entered text)
+            # Get input
+            if session:  # prompt_toolkit
+                cmd = session.prompt().strip()
+            else:  # readline fallback
+                cmd = input().strip()
+
+            # Print double separator AFTER input for visual separation
+            term_width, _ = get_terminal_size()
             print(f"{Colors.DIM}{'─' * term_width}{Colors.RESET}")
-            
+            print()  # Empty line for spacing
+
             # Reset SIGINT counter on successful input
             global _sigint_count
             _sigint_count = 0
@@ -234,7 +359,9 @@ def simple_shell():
             break
         except KeyboardInterrupt:
             # Print separator after Ctrl+C
+            term_width, _ = get_terminal_size()
             print(f"\n{Colors.DIM}{'─' * term_width}{Colors.RESET}")
+            print()  # Empty line for spacing
             content = [f"  {Colors.YELLOW}Press Ctrl+C again to exit{Colors.RESET}"]
             continue
         
@@ -246,6 +373,7 @@ def simple_shell():
         
         if cmd in ("/clear", "/cls"):
             content = []
+            clear_screen()  # Only clear on explicit user request
             continue
         
         if cmd in ("help", "/help"):

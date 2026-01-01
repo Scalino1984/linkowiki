@@ -1,17 +1,30 @@
 #!/usr/bin/env python3
 """
-LinkoWiki Copilot CLI - Full Implementation
-Based on detailed text specification
+LinkoWiki Copilot CLI - Full Interactive Implementation
+Professional Copilot-style CLI with complete feature set
 """
 import os
 import sys
 import shutil
 import time
+import signal
 from pathlib import Path
 from typing import Optional, List, Tuple
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BASE_DIR))
+
+try:
+    from prompt_toolkit import PromptSession
+    from prompt_toolkit.completion import Completer, Completion
+    from prompt_toolkit.history import FileHistory
+    from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
+    PROMPT_TOOLKIT_AVAILABLE = True
+except ImportError:
+    PROMPT_TOOLKIT_AVAILABLE = False
+
+from tools.session.manager import load_session, start_session, add_history
+from tools.ai.assistant import run_ai
 
 
 class Colors:
@@ -166,7 +179,7 @@ class CopilotCLI:
     def render_full_screen(self, content_lines: List[str] = None, input_text: str = ""):
         """Render full Copilot CLI screen"""
         # Clear screen
-        os.system('clear' if os.name != 'nt' else 'cls')
+        pass  # Don't clear terminal - preserve history
         
         # Upper header
         print(self._render_header())
@@ -214,15 +227,192 @@ class CopilotCLI:
         self.requests_remaining = remaining
 
 
+class CopilotCompleter(Completer):
+    """Auto-completion for Copilot CLI"""
+
+    COMMANDS = [
+        ("/help", "Show all commands"),
+        ("/model", "Change AI model"),
+        ("/model list", "List available models"),
+        ("/attach", "Attach file to context"),
+        ("/files", "List attached files"),
+        ("/clear", "Clear screen"),
+        ("/exit", "Exit shell"),
+        ("apply", "Apply pending actions"),
+        ("reject", "Reject pending actions"),
+    ]
+
+    def __init__(self):
+        self.files_cache = []
+        self._update_files_cache()
+
+    def _update_files_cache(self):
+        """Update list of available files for @ mentions"""
+        try:
+            import subprocess
+            result = subprocess.run(
+                ["git", "ls-files"],
+                capture_output=True,
+                text=True,
+                cwd=BASE_DIR
+            )
+            if result.returncode == 0:
+                self.files_cache = result.stdout.strip().split('\n')
+        except:
+            self.files_cache = []
+
+    def get_completions(self, document, complete_event):
+        text = document.text_before_cursor
+
+        # File mentions with @
+        if '@' in text:
+            at_pos = text.rfind('@')
+            file_prefix = text[at_pos + 1:]
+            for file_path in self.files_cache:
+                if file_path.startswith(file_prefix):
+                    yield Completion(
+                        file_path,
+                        start_position=-len(file_prefix),
+                        display=file_path,
+                        display_meta="📄 File"
+                    )
+        # Slash commands
+        elif text.startswith('/') or not text:
+            for cmd, desc in self.COMMANDS:
+                if cmd.startswith(text if text else '/'):
+                    yield Completion(
+                        cmd,
+                        start_position=-len(text) if text else 0,
+                        display=cmd,
+                        display_meta=desc
+                    )
+
+
+def interactive_copilot_shell():
+    """Run interactive Copilot-style shell"""
+    # Load or create session
+    s = load_session()
+    if not s:
+        print(f"{Colors.YELLOW}No active session. Starting new session...{Colors.RESET}")
+        s = start_session(write=True)
+
+    cli = CopilotCLI()
+
+    # Setup prompt_toolkit if available
+    session_prompt = None
+    if PROMPT_TOOLKIT_AVAILABLE:
+        try:
+            history_file = BASE_DIR / ".copilot_cli_history"
+            session_prompt = PromptSession(
+                history=FileHistory(str(history_file)),
+                completer=CopilotCompleter(),
+                complete_while_typing=True,
+                auto_suggest=AutoSuggestFromHistory(),
+            )
+        except:
+            pass
+
+    last_content = []
+
+    while True:
+        # Update terminal size (dynamic)
+        cli.term_width, cli.term_height = shutil.get_terminal_size(fallback=(120, 40))
+
+        # Render screen
+        print()  # Spacing
+        cli.render_full_screen(last_content)
+
+        # Get input
+        try:
+            if session_prompt:
+                user_input = session_prompt.prompt("")
+            else:
+                user_input = input("")
+
+            user_input = user_input.strip()
+        except (EOFError, KeyboardInterrupt):
+            print(f"\n{Colors.DIM}Exiting...{Colors.RESET}\n")
+            break
+
+        if not user_input:
+            continue
+
+        # Handle commands
+        if user_input in ("/exit", "/quit", "exit", "quit"):
+            break
+
+        if user_input == "/clear":
+            last_content = []
+            continue
+
+        if user_input in ("/help", "help"):
+            last_content = [
+                f"{Colors.BRIGHT_WHITE}Available Commands:{Colors.RESET}",
+                "",
+                f"  {Colors.CYAN}/help{Colors.RESET}              Show this help",
+                f"  {Colors.CYAN}/model{Colors.RESET}             Show current model",
+                f"  {Colors.CYAN}/model list{Colors.RESET}        List available models",
+                f"  {Colors.CYAN}/attach <file>{Colors.RESET}     Attach file to context",
+                f"  {Colors.CYAN}/files{Colors.RESET}             List attached files",
+                f"  {Colors.CYAN}/clear{Colors.RESET}             Clear screen",
+                f"  {Colors.CYAN}/exit{Colors.RESET}              Exit shell",
+                "",
+                f"  {Colors.CYAN}@<file>{Colors.RESET}            Mention a file (e.g., @src/main.py)",
+                f"  {Colors.CYAN}apply{Colors.RESET}              Apply pending AI actions",
+                f"  {Colors.CYAN}reject{Colors.RESET}             Reject pending AI actions",
+                "",
+                f"{Colors.DIM}Keyboard Shortcuts:{Colors.RESET}",
+                f"  Ctrl+C              Exit",
+                f"  Ctrl+R              Search history",
+                f"  Tab                 Auto-complete",
+                f"  ↑/↓                 Navigate history",
+            ]
+            continue
+
+        # AI interaction
+        cli.start_task("Processing your request", "")
+        add_history(user_input)
+
+        try:
+            result = run_ai(user_input, s.get("files", {}), session=s)
+            cli.stop_task()
+
+            # Display response
+            last_content = []
+            last_content.append(f"{Colors.BRIGHT_MAGENTA}Assistant:{Colors.RESET}")
+            last_content.append("")
+            last_content.extend(result.message.split('\n'))
+
+            # Show actions if any
+            if result.actions:
+                last_content.append("")
+                last_content.append(f"{Colors.YELLOW}Pending Actions:{Colors.RESET}")
+                for action in result.actions:
+                    last_content.append(f"  {Colors.GREEN}►{Colors.RESET} {action.type.upper()} {action.path}")
+                last_content.append("")
+                last_content.append(f"{Colors.DIM}Type 'apply' to execute or 'reject' to cancel{Colors.RESET}")
+
+                # Store in session
+                s["pending_actions"] = [a.dict() for a in result.actions]
+                from tools.session.manager import save_session
+                save_session(s)
+
+        except Exception as e:
+            cli.stop_task()
+            last_content = [
+                f"{Colors.RED}Error:{Colors.RESET} {str(e)}"
+            ]
+
+
 def demo_copilot_cli():
     """Demonstrate full Copilot CLI"""
     cli = CopilotCLI()
-    
+
     # Demo 1: Empty state
     print("\n=== DEMO 1: Empty State ===\n")
     cli.render_full_screen()
     input("\nPress Enter for next demo...")
-    
+
     # Demo 2: Code diff display
     print("\n=== DEMO 2: Code Diff ===\n")
     diff_lines = [
@@ -248,7 +438,7 @@ def demo_copilot_cli():
         ('added', '203', '    model_short = provider.id.replace("openai-", "").replace("anthropic-", "")'),
         ('added', '204', '    right = f"{model_short} (1x)"'),
     ]
-    
+
     content = []
     for line_type, line_num, text in diff_lines:
         if line_type == 'removed':
@@ -257,23 +447,23 @@ def demo_copilot_cli():
             content.append(f"{Colors.GREEN}+{line_num:3} {text}{Colors.RESET}")
         else:
             content.append(f"{Colors.DIM} {line_num:3} {text}{Colors.RESET}")
-    
+
     cli.render_full_screen(content)
     input("\nPress Enter for next demo...")
-    
+
     # Demo 3: Active task
     print("\n=== DEMO 3: Active Task ===\n")
     cli.start_task("Implementing Copilot-style CLI design", "13.0 KiB")
     cli.update_context_usage(0.13)
     cli.render_full_screen(content)
     input("\nPress Enter for next demo...")
-    
+
     # Demo 4: With input
     print("\n=== DEMO 4: User Input ===\n")
     cli.stop_task()
     cli.render_full_screen(content, input_text="/help")
     input("\nPress Enter for next demo...")
-    
+
     # Demo 5: High context usage
     print("\n=== DEMO 5: High Context Usage ===\n")
     cli.update_context_usage(0.87)
@@ -283,4 +473,12 @@ def demo_copilot_cli():
 
 
 if __name__ == "__main__":
-    demo_copilot_cli()
+    import argparse
+    parser = argparse.ArgumentParser(description="LinkoWiki Copilot CLI")
+    parser.add_argument("--demo", action="store_true", help="Run demo mode")
+    args = parser.parse_args()
+
+    if args.demo:
+        demo_copilot_cli()
+    else:
+        interactive_copilot_shell()

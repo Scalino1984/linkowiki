@@ -8,6 +8,17 @@ import shutil
 from pathlib import Path
 from datetime import datetime
 
+try:
+    from prompt_toolkit.shortcuts import radiolist_dialog
+    from prompt_toolkit.styles import Style as PTStyle
+    from prompt_toolkit.application import Application
+    from prompt_toolkit.key_binding import KeyBindings
+    from prompt_toolkit.layout import Layout, HSplit, Window, FormattedTextControl
+    from prompt_toolkit.formatted_text import HTML
+    PROMPT_TOOLKIT_AVAILABLE = True
+except ImportError:
+    PROMPT_TOOLKIT_AVAILABLE = False
+
 BASE_DIR = Path(__file__).resolve().parents[1]
 WIKI_DIR = BASE_DIR / "wiki"
 CHANGELOG = WIKI_DIR / ".changelog"
@@ -413,50 +424,136 @@ def print_copilot_prompt(text=""):
 
 def session_shell():
     from tools.ai.assistant import run_ai
-    
+
     s = load_session()
     if not s:
         print(f"\n{Colors.RED}error: no active session{Colors.RESET}")
         print(f"{Colors.DIM}run 'linkowiki-admin session start' first{Colors.RESET}\n")
         return
 
-    clear_screen()
+    # Setup input method with prompt_toolkit if available
+    session_prompt = None
+    if PROMPT_TOOLKIT_AVAILABLE:
+        try:
+            from prompt_toolkit import PromptSession
+            from prompt_toolkit.completion import Completer, Completion
+            from prompt_toolkit.history import FileHistory
+            from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
+
+            # Shell commands for completion with descriptions
+            shell_commands = [
+                ("/help", "Show help for interactive commands"),
+                ("/model", "Show current AI model"),
+                ("/model list", "List all available models"),
+                ("/model set", "Switch to a different model"),
+                ("/attach", "Attach a file to the context"),
+                ("/files", "List attached files"),
+                ("/tree", "Show wiki structure"),
+                ("/clear", "Clear the screen"),
+                ("/exit", "Exit the shell"),
+                ("/quit", "Exit the shell"),
+                ("apply", "Apply pending actions"),
+                ("reject", "Reject pending actions"),
+            ]
+
+            class ShellCompleter(Completer):
+                def get_completions(self, document, complete_event):
+                    text = document.text_before_cursor
+
+                    # Always show completions if text is empty or starts with "/"
+                    if not text or text == "/" or text.startswith("/"):
+                        for cmd, desc in shell_commands:
+                            if cmd.startswith(text if text else ""):
+                                # Calculate how much to replace
+                                start_pos = -len(text) if text else 0
+                                yield Completion(
+                                    cmd,
+                                    start_position=start_pos,
+                                    display=cmd,
+                                    display_meta=desc
+                                )
+                    else:
+                        # Also show non-slash commands
+                        for cmd, desc in shell_commands:
+                            if cmd.startswith(text):
+                                yield Completion(
+                                    cmd,
+                                    start_position=-len(text),
+                                    display=cmd,
+                                    display_meta=desc
+                                )
+
+            history_file = BASE_DIR / ".session_shell_history"
+            session_prompt = PromptSession(
+                history=FileHistory(str(history_file)),
+                completer=ShellCompleter(),
+                complete_while_typing=True,
+                complete_in_thread=True,
+                enable_history_search=True,
+                auto_suggest=AutoSuggestFromHistory(),
+            )
+            print(f"{Colors.GREEN}✓ Auto-Vervollständigung & History aktiviert{Colors.RESET}")
+            print(f"{Colors.DIM}  Tippe \"/\" um alle Kommandos zu sehen{Colors.RESET}")
+            print(f"{Colors.DIM}  Tab/↓ für Vervollständigung | ↑/↓ für History{Colors.RESET}\n")
+        except Exception as e:
+            print(f"{Colors.YELLOW}⚠ prompt_toolkit nicht verfügbar: {e}{Colors.RESET}")
+            print(f"{Colors.DIM}  Verwende Standard-Eingabe{Colors.RESET}\n")
+            session_prompt = None
+    else:
+        print(f"{Colors.YELLOW}ℹ️  prompt_toolkit nicht installiert{Colors.RESET}")
+        print(f"{Colors.DIM}  Installiere mit: pip install prompt_toolkit{Colors.RESET}\n")
+
     last_options = []
     last_content = []
+    conversation_history = []  # Store all conversation turns
+
+    # Initial render
+    print()
+    print_copilot_header(s)
+    print()
 
     while True:
-        # Clear and render full screen
-        clear_screen()
-        
-        # Print Copilot-style header
-        print_copilot_header(s)
-        print()
-        
-        # Print last content if any
-        if last_content:
-            for line in last_content:
-                print(line)
+        # Get current terminal width (dynamic - fresh on each iteration)
+        term_width, _ = get_terminal_size()
+
+        # Render conversation history (between header and input)
+        if conversation_history:
             print()
-        
-        # Print footer/separator/prompt at bottom
-        hint_lines = [
-            f"{Colors.DIM}Try \"/help\" for commands{Colors.RESET}",
-            f"{Colors.DIM}? for shortcuts{Colors.RESET}",
-        ]
-        for line in hint_lines:
-            print(f"  {line}")
+            for turn in conversation_history:
+                for line in turn:
+                    print(line)
+                print()
+
+        # Print footer hints
+        print(f"{Colors.DIM}Try \"/help\" for commands{Colors.RESET}")
+        print(f"{Colors.DIM}? for shortcuts{Colors.RESET}")
         print()
-        print_copilot_separator()
-        print_copilot_prompt()
-        
+
+        # Separator line BEFORE input
+        print(f"{Colors.DIM}{'─' * term_width}{Colors.RESET}")
+
         try:
-            cmd = input().strip()
+            if session_prompt:
+                # Use prompt_toolkit with completion and history
+                cmd = session_prompt.prompt("> ").strip()
+            else:
+                # Fallback to normal input
+                print("> ", end="", flush=True)
+                cmd = input().strip()
         except (EOFError, KeyboardInterrupt):
+            print()
+            print(f"{Colors.DIM}{'─' * term_width}{Colors.RESET}")
             print()
             break
 
+        # Separator line AFTER input (only if we got input)
+        if cmd:
+            # Re-get terminal width (in case it changed during input)
+            term_width, _ = get_terminal_size()
+            print(f"{Colors.DIM}{'─' * term_width}{Colors.RESET}")
+            print()
+
         if not cmd:
-            clear_screen()
             continue
 
         # Handle commands
@@ -465,7 +562,13 @@ def session_shell():
             break
         
         if cmd in ("/clear", "/cls"):
+            conversation_history = []
             last_content = []
+            clear_screen()  # Only clear on explicit user request
+            # Re-print header after clear
+            print()
+            print_copilot_header(s)
+            print()
             continue
 
         if cmd in ("help", "/help"):
@@ -493,6 +596,10 @@ def session_shell():
                     last_content.append(f"  {Colors.BRIGHT_WHITE}{cmd_name}{Colors.RESET}{' ' * spacing}{Colors.DIM}{desc}{Colors.RESET}")
                 else:
                     last_content.append("")
+
+            # Add to conversation history
+            if last_content:
+                conversation_history.append(last_content)
             continue
         
         if cmd == "/model":
@@ -683,20 +790,199 @@ def print_main_menu():
     print()
 
 
-def interactive_menu():
-    """Run interactive menu loop"""
-    while True:
-        print_main_menu()
-        
-        try:
-            choice = input(f"{Colors.BRIGHT_BLACK}Wähle eine Option{Colors.RESET} {Colors.BRIGHT_BLACK}❯{Colors.RESET} ").strip()
-        except (EOFError, KeyboardInterrupt):
-            print(f"\n{Colors.DIM}👋 Auf Wiedersehen{Colors.RESET}\n")
+def get_menu_items():
+    """Get all menu items as a flat list"""
+    return [
+        ("1", "Session starten (read-only)", "session_management"),
+        ("2", "Session starten (write-mode)", "session_management"),
+        ("3", "Session Shell öffnen", "session_management"),
+        ("4", "Session Status anzeigen", "session_management"),
+        ("5", "Session beenden", "session_management"),
+        ("6", "Session exportieren", "session_management"),
+        ("7", "Wiki-Struktur anzeigen", "wiki_browsing"),
+        ("8", "Wiki durchsuchen", "wiki_browsing"),
+        ("9", "Letzte Änderungen anzeigen", "wiki_browsing"),
+        ("10", "Kategorien & Statistiken", "wiki_browsing"),
+        ("11", "KI-Abfrage (einmalig)", "ai_tools"),
+        ("12", "Wiki-Eintrag erstellen (geführt)", "ai_tools"),
+        ("h", "Hilfe anzeigen", "other"),
+        ("q", "Beenden", "other"),
+    ]
+
+
+def show_interactive_menu_with_arrows():
+    """Show interactive menu with arrow key navigation using custom UI"""
+    menu_items = get_menu_items()
+
+    section_names = {
+        "session_management": "📊 Session Management",
+        "wiki_browsing": "📚 Wiki Browsing",
+        "ai_tools": "🤖 AI Tools",
+        "other": "⚙️  Weitere Optionen"
+    }
+
+    # Build menu with sections
+    menu_with_sections = []
+    current_section = None
+
+    for key, desc, section in menu_items:
+        if section != current_section:
+            current_section = section
+            if menu_with_sections:
+                menu_with_sections.append(("separator", "", ""))
+            menu_with_sections.append(("header", section_names[section], section))
+        menu_with_sections.append(("item", key, desc))
+
+    # State
+    selected_index = 2  # Start at first real item (after header)
+    result = [None]
+
+    # Find first valid item
+    for i, (item_type, _, _) in enumerate(menu_with_sections):
+        if item_type == "item":
+            selected_index = i
             break
-        
-        if not choice:
-            continue
-            
+
+    def get_formatted_text():
+        """Generate the menu display using FormattedText tuples"""
+        from prompt_toolkit.formatted_text import FormattedText
+
+        lines = []
+        # Header with cyan foreground only (no background)
+        lines.append([('fg:#00aaff bold', '╔════════════════════════════════════════════════════════════════════════════════╗')])
+        lines.append([('fg:#00aaff bold', '║ '), ('fg:#00aaff bold', '🧠 LinkoWiki Admin - Hauptmenü'), ('fg:#00aaff bold', ' ' * 51 + '║')])
+        lines.append([('fg:#00aaff bold', '╚════════════════════════════════════════════════════════════════════════════════╝')])
+        lines.append([('', '')])
+        lines.append([('fg:#666666', 'Nutze ↑/↓ zum Navigieren │ Enter zum Auswählen │ ESC/q zum Beenden')])
+        lines.append([('', '')])
+
+        for i, (item_type, key, desc) in enumerate(menu_with_sections):
+            if item_type == "separator":
+                lines.append([('', '')])
+            elif item_type == "header":
+                # Section header with emoji and cyan text
+                lines.append([('fg:#00aaff bold', f'{key}')])
+            elif item_type == "item":
+                if i == selected_index:
+                    # Selected item with full-width cyan background bar
+                    padding = max(70 - len(desc) - len(key), 0)
+                    text = f'  ▶ {key:3}  │ {desc}{" " * padding}'
+                    lines.append([('bg:#00aaff fg:#000000 bold', text)])
+                else:
+                    # Normal item with structured layout
+                    lines.append([('fg:#aaaaaa', f'    {key:3}  │ '), ('fg:#cccccc', desc)])
+
+        lines.append([('', '')])
+
+        # Combine all lines with newlines
+        result = []
+        for i, line in enumerate(lines):
+            if i > 0:
+                result.append(('', '\n'))
+            result.extend(line)
+
+        return result
+
+    # Key bindings
+    kb = KeyBindings()
+
+    @kb.add('down')
+    def move_down(event):
+        nonlocal selected_index
+        # Find next valid item
+        for i in range(selected_index + 1, len(menu_with_sections)):
+            if menu_with_sections[i][0] == "item":
+                selected_index = i
+                break
+
+    @kb.add('up')
+    def move_up(event):
+        nonlocal selected_index
+        # Find previous valid item
+        for i in range(selected_index - 1, -1, -1):
+            if menu_with_sections[i][0] == "item":
+                selected_index = i
+                break
+
+    @kb.add('enter')
+    def select(event):
+        if menu_with_sections[selected_index][0] == "item":
+            result[0] = menu_with_sections[selected_index][1]
+            event.app.exit()
+
+    @kb.add('escape')
+    @kb.add('q')
+    def quit(event):
+        event.app.exit()
+
+    # Layout
+    text_control = FormattedTextControl(
+        text=get_formatted_text,
+        focusable=True
+    )
+
+    window = Window(content=text_control, always_hide_cursor=True)
+    layout = Layout(window)
+
+    # Style
+    style = PTStyle.from_dict({
+        '': 'bg:#000000 #ffffff',
+    })
+
+    # Application
+    app = Application(
+        layout=layout,
+        key_bindings=kb,
+        style=style,
+        full_screen=False,
+        mouse_support=False,
+    )
+
+    app.run()
+    return result[0]
+
+
+def interactive_menu(force_interactive=True):
+    """Run interactive menu loop"""
+    # Try to use interactive menu by default, unless explicitly disabled
+    # Check if prompt_toolkit is available and we have a tty (or force_interactive is True)
+    use_interactive = PROMPT_TOOLKIT_AVAILABLE and (force_interactive or sys.stdin.isatty())
+
+    # Debug info (can be removed later)
+    if not PROMPT_TOOLKIT_AVAILABLE:
+        print(f"{Colors.YELLOW}ℹ️  prompt_toolkit nicht installiert - verwende Text-Menü{Colors.RESET}\n")
+    elif not use_interactive:
+        print(f"{Colors.YELLOW}ℹ️  Kein TTY erkannt - verwende Text-Menü{Colors.RESET}\n")
+
+    while True:
+        choice = None
+
+        if use_interactive:
+            try:
+                # Use interactive menu with arrow keys
+                choice = show_interactive_menu_with_arrows()
+                if not choice:
+                    # User cancelled (ESC)
+                    print(f"\n{Colors.DIM}👋 Auf Wiedersehen{Colors.RESET}\n")
+                    break
+            except Exception as e:
+                # Fall back to text menu if prompt_toolkit fails
+                print(f"{Colors.YELLOW}⚠ Fallback to text menu: {e}{Colors.RESET}")
+                use_interactive = False
+                continue
+        else:
+            # Fallback to text-based menu
+            print_main_menu()
+
+            try:
+                choice = input(f"{Colors.BRIGHT_BLACK}Wähle eine Option{Colors.RESET} {Colors.BRIGHT_BLACK}❯{Colors.RESET} ").strip()
+            except (EOFError, KeyboardInterrupt):
+                print(f"\n{Colors.DIM}👋 Auf Wiedersehen{Colors.RESET}\n")
+                break
+
+            if not choice:
+                continue
+
         if choice == "q":
             print(f"\n{Colors.DIM}👋 Auf Wiedersehen{Colors.RESET}\n")
             break

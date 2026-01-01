@@ -225,31 +225,26 @@ def demo_views():
     
     # View 1: Idle
     print("\n=== VIEW 1: IDLE ===\n")
-    shell.clear_screen()
     shell.show_idle()
     input("\nPress Enter for next view...")
     
     # View 2: /help command
     print("\n=== VIEW 2: /help ===\n")
-    shell.clear_screen()
     shell.show_command_help("/help")
     input("\nPress Enter for next view...")
     
     # View 3: /add-dir autocomplete
     print("\n=== VIEW 3: Command Autocomplete ===\n")
-    shell.clear_screen()
     shell.show_command_autocomplete("/")
     input("\nPress Enter for next view...")
     
     # View 4: @ file picker
     print("\n=== VIEW 4: File Picker (@) ===\n")
-    shell.clear_screen()
     shell.show_file_autocomplete()
     input("\nPress Enter for next view...")
     
     # View 5: @.git filtered
     print("\n=== VIEW 5: Filtered Files (@.git) ===\n")
-    shell.clear_screen()
     shell.show_file_autocomplete("@.git")
     input("\nPress Enter to finish...")
 
