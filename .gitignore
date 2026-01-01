@@ -14,6 +14,7 @@ env/
 
 # Session files
 .linkowiki-session.json
+.linkowiki-memory.json
 
 # IDE
 .vscode/
