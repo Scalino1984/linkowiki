@@ -109,16 +109,15 @@ def render_copilot_screen(session, content_lines=None):
     # Header
     print(f"{Colors.DIM}{left}{' ' * spacing}{right}{Colors.RESET}")
     print(f"{Colors.DIM}{'─' * term_width}{Colors.RESET}")
-    print()
     
-    # Content
+    # Content area (if any)
     if content_lines:
+        print()
         for line in content_lines:
             print(line)
         print()
     
-    # Footer/Separator/Prompt at bottom
-    print(f"{Colors.DIM}{'─' * term_width}{Colors.RESET}")
+    # Prompt (without bottom separator yet)
     print(f"> ", end="", flush=True)
 
 
@@ -157,12 +156,60 @@ def simple_shell():
         return
     
     content = []
+    term_width, _ = get_terminal_size()
     
     while True:
-        render_copilot_screen(s, content)
+        # Clear screen and render header
+        clear_screen()
+        
+        # Get session info
+        from tools.ai.providers import get_provider_registry
+        from tools.config import get_config
+        
+        if "active_provider_id" not in s or not s.get("active_provider_id"):
+            config = get_config()
+            s["active_provider_id"] = config.default_provider
+        
+        registry = get_provider_registry()
+        provider = registry.get_provider(s.get("active_provider_id"))
+        
+        # Build header
+        cwd = os.getcwd()
+        home = os.path.expanduser("~")
+        short_cwd = "~" + cwd[len(home):] if cwd.startswith(home) else cwd
+        
+        git_branch = get_git_branch()
+        left = short_cwd
+        if git_branch:
+            left += f"[ {git_branch}]"
+        
+        model_short = provider.id.replace("openai-", "").replace("anthropic-", "")
+        right = f"{model_short} (1x)"
+        
+        spacing = term_width - len(left) - len(right)
+        if spacing < 1:
+            spacing = 1
+        
+        # Print header
+        print(f"{Colors.DIM}{left}{' ' * spacing}{right}{Colors.RESET}")
+        print(f"{Colors.DIM}{'─' * term_width}{Colors.RESET}")
+        
+        # Print content if any
+        if content:
+            print()
+            for line in content:
+                print(line)
+            print()
+        
+        # Print prompt
+        print(f"> ", end="", flush=True)
         
         try:
             cmd = input().strip()
+            
+            # Print separator AFTER input (on same line as entered text)
+            print(f"{Colors.DIM}{'─' * term_width}{Colors.RESET}")
+            
             # Reset SIGINT counter on successful input
             global _sigint_count
             _sigint_count = 0
@@ -170,7 +217,8 @@ def simple_shell():
             print()
             break
         except KeyboardInterrupt:
-            # Don't break on first Ctrl+C, just continue
+            # Print separator after Ctrl+C
+            print(f"\n{Colors.DIM}{'─' * term_width}{Colors.RESET}")
             content = [f"  {Colors.YELLOW}Press Ctrl+C again to exit{Colors.RESET}"]
             continue
         
