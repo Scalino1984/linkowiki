@@ -9,7 +9,7 @@ import signal
 import subprocess
 import re
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 from datetime import datetime
 
 # Add project root to path
@@ -38,7 +38,6 @@ try:
     from prompt_toolkit.history import FileHistory
     from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
     from prompt_toolkit.formatted_text import HTML
-    from prompt_toolkit.key_binding import KeyBindings
     PROMPT_TOOLKIT_AVAILABLE = True
 except ImportError:
     PROMPT_TOOLKIT_AVAILABLE = False
@@ -170,7 +169,7 @@ class RichSessionShell:
             self.console.print(f"[red]Error reading file {filepath}: {str(e)}[/red]")
         return None
 
-    def _extract_and_load_files(self, text: str) -> tuple[str, Dict[str, str]]:
+    def _extract_and_load_files(self, text: str) -> Tuple[str, Dict[str, str]]:
         """Extract @file mentions and load their content automatically"""
         # Find all @file mentions
         file_pattern = r'@([^\s]+)'
@@ -478,11 +477,15 @@ class RichSessionShell:
         try:
             # Stream the response
             for chunk in run_ai_streaming(user_input, all_files, session=self.session):
-                if hasattr(chunk, 'data'):
-                    # Handle streaming chunk
-                    text = str(chunk.data) if chunk.data else ""
-                    self.console.print(text, end="")
-                    full_response += text
+                # Safely handle streaming chunks
+                try:
+                    if hasattr(chunk, 'data') and chunk.data:
+                        text = str(chunk.data)
+                        self.console.print(text, end="")
+                        full_response += text
+                except Exception as e:
+                    # Skip malformed chunks
+                    continue
         except Exception as e:
             # Fall back to standard mode if streaming fails
             self.console.print(f"\n[yellow]Streaming failed, using standard mode...[/yellow]")
@@ -594,22 +597,12 @@ class RichSessionShell:
         if PROMPT_TOOLKIT_AVAILABLE:
             history_file = BASE_DIR / ".rich_session_history"
             
-            # Setup key bindings for multi-line input
-            kb = KeyBindings()
-            
-            @kb.add('enter')
-            def _(event):
-                """Enter submits, Shift+Enter adds new line"""
-                buffer = event.app.current_buffer
-                if event.app.key_processor.key_sequence[-1].key == 'enter':
-                    buffer.validate_and_handle()
-            
             session_prompt = PromptSession(
                 history=FileHistory(str(history_file)),
                 completer=ProfessionalCompleter(),
                 complete_while_typing=True,
                 auto_suggest=AutoSuggestFromHistory(),
-                multiline=False,  # Single line by default
+                multiline=False,  # Single line input
             )
 
         # Show welcome
@@ -769,8 +762,9 @@ class RichSessionShell:
         for idx, role, content in results[:10]:  # Show max 10 results
             # Truncate content
             preview = content[:100] + "..." if len(content) > 100 else content
-            # Highlight query in preview
-            preview = preview.replace(query, f"[yellow]{query}[/yellow]")
+            # Highlight query in preview (case-insensitive)
+            import re
+            preview = re.sub(f'({re.escape(query)})', r'[yellow]\1[/yellow]', preview, flags=re.IGNORECASE)
             
             role_styled = "[cyan]User[/cyan]" if role == "user" else "[magenta]Assistant[/magenta]"
             table.add_row(str(idx), role_styled, preview)
