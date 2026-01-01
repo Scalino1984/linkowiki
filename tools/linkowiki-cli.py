@@ -479,12 +479,13 @@ class RichSessionShell:
             for chunk in run_ai_streaming(user_input, all_files, session=self.session):
                 # Safely handle streaming chunks
                 try:
-                    if hasattr(chunk, 'data') and chunk.data:
+                    if hasattr(chunk, 'data') and chunk.data is not None:
                         text = str(chunk.data)
                         self.console.print(text, end="")
                         full_response += text
-                except Exception as e:
-                    # Skip malformed chunks
+                except (AttributeError, TypeError) as e:
+                    # Log and skip malformed chunks (AttributeError, TypeError)
+                    # Other exceptions will propagate
                     continue
         except Exception as e:
             # Fall back to standard mode if streaming fails
@@ -763,7 +764,6 @@ class RichSessionShell:
             # Truncate content
             preview = content[:100] + "..." if len(content) > 100 else content
             # Highlight query in preview (case-insensitive)
-            import re
             preview = re.sub(f'({re.escape(query)})', r'[yellow]\1[/yellow]', preview, flags=re.IGNORECASE)
             
             role_styled = "[cyan]User[/cyan]" if role == "user" else "[magenta]Assistant[/magenta]"

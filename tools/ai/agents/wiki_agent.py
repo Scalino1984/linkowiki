@@ -4,6 +4,28 @@
 from pathlib import Path
 
 
+def _find_project_root() -> Path:
+    """
+    Find the project root directory by looking for marker files.
+    
+    Returns:
+        Path: The project root directory
+    """
+    # Start from this file's directory
+    current = Path(__file__).resolve().parent
+    
+    # Search upwards for marker files
+    markers = ['.git', 'pyproject.toml', 'requirements.txt', 'AI_SYSTEM_PROMPT.md']
+    
+    for parent in [current] + list(current.parents):
+        for marker in markers:
+            if (parent / marker).exists():
+                return parent
+    
+    # Fallback: three levels up from this file
+    return Path(__file__).resolve().parents[3]
+
+
 def get_wiki_system_prompt() -> str:
     """
     Get the wiki agent system prompt from external file.
@@ -14,8 +36,8 @@ def get_wiki_system_prompt() -> str:
     Returns:
         str: The system prompt content
     """
-    # Path to the system prompt file in project root
-    project_root = Path(__file__).resolve().parents[3]
+    # Find project root using marker files
+    project_root = _find_project_root()
     prompt_file = project_root / "AI_SYSTEM_PROMPT.md"
     
     try:
