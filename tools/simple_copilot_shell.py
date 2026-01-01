@@ -6,6 +6,8 @@ Fixed layout with prompt at bottom
 import os
 import sys
 import shutil
+import signal
+import time
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -21,6 +23,11 @@ class Colors:
     RED = "\033[31m"
     YELLOW = "\033[33m"
     BRIGHT_WHITE = "\033[97m"
+
+
+# Global for SIGINT handling
+_last_sigint_time = 0
+_sigint_count = 0
 
 
 def clear_screen():
@@ -115,8 +122,34 @@ def render_copilot_screen(session, content_lines=None):
     print(f"> ", end="", flush=True)
 
 
+def sigint_handler(signum, frame):
+    """Handle Ctrl+C with double-press detection"""
+    global _last_sigint_time, _sigint_count
+    
+    current_time = time.time()
+    
+    # Reset count if more than 2 seconds since last SIGINT
+    if current_time - _last_sigint_time > 2.0:
+        _sigint_count = 0
+    
+    _sigint_count += 1
+    _last_sigint_time = current_time
+    
+    if _sigint_count >= 2:
+        # Second Ctrl+C within 2 seconds - exit
+        print(f"\n\n{Colors.DIM}Exiting...{Colors.RESET}\n")
+        sys.exit(0)
+    else:
+        # First Ctrl+C - show message and raise to interrupt input()
+        print(f"\n{Colors.YELLOW}⚠  Press Ctrl+C again within 2 seconds to exit{Colors.RESET}")
+        raise KeyboardInterrupt
+
+
 def simple_shell():
     """Simple Copilot-style shell"""
+    # Setup SIGINT handler
+    signal.signal(signal.SIGINT, sigint_handler)
+    
     s = load_session()
     if not s:
         print(f"\n{Colors.RED}error: no active session{Colors.RESET}")
@@ -130,9 +163,16 @@ def simple_shell():
         
         try:
             cmd = input().strip()
-        except (EOFError, KeyboardInterrupt):
+            # Reset SIGINT counter on successful input
+            global _sigint_count
+            _sigint_count = 0
+        except EOFError:
             print()
             break
+        except KeyboardInterrupt:
+            # Don't break on first Ctrl+C, just continue
+            content = [f"  {Colors.YELLOW}Press Ctrl+C again to exit{Colors.RESET}"]
+            continue
         
         if not cmd:
             continue
