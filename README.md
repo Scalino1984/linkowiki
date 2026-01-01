@@ -2,6 +2,41 @@
 
 ![cheat.sh logo](http://cheat.sh/files/big-logo-v2-fixed.png)
 
+# LinkoWiki
+
+AI-powered wiki management system with professional CLI interface.
+
+## 🤖 AI System Prompt Configuration
+
+The AI assistant's behavior is controlled by a system prompt stored in:
+```
+AI_SYSTEM_PROMPT.md
+```
+
+This file contains the complete instructions for the AI assistant and can be modified to customize:
+- Response style and tone
+- Wiki structure conventions
+- Interaction patterns
+- Output formatting rules
+
+**To customize the AI behavior:**
+1. Edit `AI_SYSTEM_PROMPT.md` in the project root
+2. Changes take effect on next CLI session start
+3. The file is version-controlled for team collaboration
+
+## 📚 Professional CLI
+
+See [PROFESSIONAL_CLI.md](PROFESSIONAL_CLI.md) for details on the professional CLI features.
+
+**Quick Start:**
+```bash
+python tools/linkowiki-cli.py
+```
+
+---
+
+# Original cheat.sh Documentation
+
 Unified access to the best community driven cheat sheets repositories of the world.
 
 Let's imagine for a moment that there is such a thing as an ideal cheat sheet.

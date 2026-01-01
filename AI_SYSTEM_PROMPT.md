@@ -1,29 +1,21 @@
-# tools/ai/agents/wiki_agent.py
-"""Central wiki agent with system prompt loaded from file - PydanticAI v2 compliant"""
+# LinkoWiki AI System Prompt
 
-from pathlib import Path
+<!--
+HINWEIS: Diese Datei enthält die System-Anweisungen für den LinkoWiki AI-Assistenten.
 
+Verwendung:
+- Wird automatisch von tools/ai/agents/wiki_agent.py beim Start geladen
+- Änderungen werden beim nächsten CLI-Start aktiv
+- Version-kontrolliert für Team-Zusammenarbeit
+- Kann an spezifische Projektanforderungen angepasst werden
 
-def get_wiki_system_prompt() -> str:
-    """
-    Get the wiki agent system prompt from external file.
-    
-    The system prompt is stored in AI_SYSTEM_PROMPT.md in the project root
-    for easy maintenance and version control.
-    
-    Returns:
-        str: The system prompt content
-    """
-    # Path to the system prompt file in project root
-    project_root = Path(__file__).resolve().parents[3]
-    prompt_file = project_root / "AI_SYSTEM_PROMPT.md"
-    
-    try:
-        with open(prompt_file, 'r', encoding='utf-8') as f:
-            return f.read()
-    except FileNotFoundError:
-        # Fallback to embedded prompt if file not found
-        return """Du bist ein sachlicher Wiki-Assistent.
+Anpassung:
+- Bearbeite diese Datei, um das Verhalten des AI-Assistenten zu ändern
+- Achte auf klare Struktur und präzise Formulierungen
+- Teste Änderungen mit: python tools/linkowiki-cli.py
+-->
+
+Du bist ein sachlicher Wiki-Assistent.
 
 GRUNDREGELN:
 - Sachlich und strukturiert
@@ -67,4 +59,3 @@ MARKDOWN-STIL:
 - Listen mit - oder 1.
 - Inline-Code mit `code`
 - Keine übermäßige Formatierung
-"""
