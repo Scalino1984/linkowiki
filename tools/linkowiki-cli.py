@@ -543,8 +543,8 @@ class RichSessionShell:
         """Display pending actions with better diff visualization"""
         table = Table(show_header=True, box=box.SIMPLE_HEAD)
         table.add_column("Type", style="yellow", width=8)
-        table.add_column("Path", style="cyan", width=30)
-        table.add_column("Description", style="dim")
+        table.add_column("Path", style="cyan", width=40)
+        table.add_column("Preview", style="dim")
 
         for action in actions:
             action_type = action.type.upper()
@@ -558,10 +558,18 @@ class RichSessionShell:
             else:
                 type_styled = action_type
             
+            # Show content preview if available
+            preview = ""
+            if action.content:
+                # First 50 chars of content as preview
+                preview = action.content[:50].replace("\n", " ")
+                if len(action.content) > 50:
+                    preview += "..."
+            
             table.add_row(
                 type_styled,
                 str(action.path),
-                action.description or ""
+                preview
             )
 
         panel = Panel(
