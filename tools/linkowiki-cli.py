@@ -8,9 +8,11 @@ import sys
 import signal
 import subprocess
 import re
+import glob as glob_module
 from pathlib import Path
 from typing import List, Optional, Dict, Any, Tuple
 from datetime import datetime
+from difflib import get_close_matches
 
 # Add project root to path
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -58,6 +60,8 @@ class ProfessionalCompleter(Completer):
         ("/files", "📁 List attached files"),
         ("/clear", "🧹 Clear conversation"),
         ("/search", "🔍 Search conversation history"),
+        ("/autoexec", "⚡ Toggle auto-execute mode"),
+        ("/retry", "🔄 Retry last request"),
         ("/exit", "🚪 Exit shell"),
         ("/stream on", "🌊 Enable streaming output"),
         ("/stream off", "⏸️  Disable streaming output"),
@@ -142,6 +146,7 @@ class RichSessionShell:
         self.attached_files: Dict[str, str] = {}  # filename -> content
         self.streaming_enabled = False  # Disable streaming by default due to structured output requirements
         self.last_displayed_turn = -1  # Track which turn was last displayed to avoid duplicates
+        self.autoexec_enabled = False  # Auto-execute actions without confirmation
 
         # Terminal info
         self.update_terminal_size()
@@ -170,20 +175,130 @@ class RichSessionShell:
             self.console.print(f"[red]Error reading file {filepath}: {str(e)}[/red]")
         return None
 
+    def _find_files_fuzzy(self, pattern: str) -> List[str]:
+        """Find files using fuzzy matching, glob patterns, or directory listing"""
+        # Check if it's a glob pattern
+        if '*' in pattern or '?' in pattern:
+            matches = glob_module.glob(str(BASE_DIR / pattern), recursive=True)
+            return [str(Path(m).relative_to(BASE_DIR)) for m in matches if Path(m).is_file()]
+        
+        # Check if it's a directory
+        dir_path = BASE_DIR / pattern
+        if dir_path.exists() and dir_path.is_dir():
+            files = []
+            for file_path in dir_path.rglob('*'):
+                if file_path.is_file() and not file_path.name.startswith('.'):
+                    files.append(str(file_path.relative_to(BASE_DIR)))
+            return files
+        
+        # Try exact match first
+        file_path = BASE_DIR / pattern
+        if file_path.exists() and file_path.is_file():
+            return [pattern]
+        
+        # Fuzzy matching - search for files with similar names
+        try:
+            result = subprocess.run(
+                ["git", "ls-files"],
+                capture_output=True,
+                text=True,
+                cwd=BASE_DIR,
+                timeout=2
+            )
+            if result.returncode == 0:
+                all_files = result.stdout.strip().split('\n')
+                # Find files that contain the pattern or are close matches
+                matches = []
+                pattern_lower = pattern.lower()
+                for f in all_files:
+                    if pattern_lower in f.lower():
+                        matches.append(f)
+                
+                # If we found matches, return them
+                if matches:
+                    return matches[:5]  # Limit to 5 fuzzy matches
+                
+                # Try get_close_matches as fallback
+                close = get_close_matches(pattern, all_files, n=3, cutoff=0.6)
+                return close
+        except:
+            pass
+        
+        return []
+
+    def _detect_auto_files(self, text: str) -> List[str]:
+        """Automatically detect files mentioned in text without @ prefix"""
+        files = []
+        
+        # Common file patterns
+        file_patterns = [
+            r'\b([\w\-/]+\.(?:py|js|ts|jsx|tsx|md|txt|json|yaml|yml|toml|ini|cfg|sh))\b',
+            r'\b(README\.md|pyproject\.toml|package\.json|Dockerfile|Makefile)\b',
+        ]
+        
+        for pattern in file_patterns:
+            matches = re.findall(pattern, text, re.IGNORECASE)
+            for match in matches:
+                # Check if file exists
+                if (BASE_DIR / match).exists():
+                    files.append(match)
+        
+        return files
+
     def _extract_and_load_files(self, text: str) -> Tuple[str, Dict[str, str]]:
-        """Extract @file mentions and load their content automatically"""
+        """Extract @file mentions and load their content automatically with fuzzy matching"""
         # Find all @file mentions
         file_pattern = r'@([^\s]+)'
         matches = re.findall(file_pattern, text)
         
         loaded_files = {}
+        
+        # Process @mentions
         for filepath in matches:
             if filepath not in self.attached_files:
-                content = self._read_file(filepath)
-                if content:
-                    loaded_files[filepath] = content
-                    self.attached_files[filepath] = content
-                    self.console.print(f"[dim]📎 Loaded: {filepath}[/dim]")
+                # Try fuzzy/glob/directory matching
+                found_files = self._find_files_fuzzy(filepath)
+                
+                if not found_files:
+                    self.console.print(f"[yellow]⚠ Could not find: {filepath}[/yellow]")
+                    continue
+                
+                # If multiple files found, show them
+                if len(found_files) > 1:
+                    self.console.print(f"[dim]📎 Found {len(found_files)} matches for '{filepath}':[/dim]")
+                    for f in found_files[:10]:  # Show max 10
+                        self.console.print(f"[dim]   - {f}[/dim]")
+                
+                # Load all found files
+                for f in found_files:
+                    if f not in self.attached_files:
+                        content = self._read_file(f)
+                        if content:
+                            loaded_files[f] = content
+                            self.attached_files[f] = content
+                            self.console.print(f"[dim]📎 Loaded: {f}[/dim]")
+        
+        # Auto-detect files mentioned without @
+        if "dokumentiere" in text.lower() or "erstelle wiki" in text.lower():
+            auto_files = self._detect_auto_files(text)
+            for f in auto_files:
+                if f not in self.attached_files:
+                    content = self._read_file(f)
+                    if content:
+                        loaded_files[f] = content
+                        self.attached_files[f] = content
+                        self.console.print(f"[dim]📎 Auto-loaded: {f}[/dim]")
+        
+        # Context-aware loading for project documentation requests
+        if any(keyword in text.lower() for keyword in ["projekt", "project", "wiki für dieses", "dokumentiere das"]):
+            context_files = ["README.md", "pyproject.toml", "package.json", "requirements.txt"]
+            for f in context_files:
+                if (BASE_DIR / f).exists() and f not in self.attached_files:
+                    content = self._read_file(f)
+                    if content:
+                        loaded_files[f] = content
+                        self.attached_files[f] = content
+                        self.console.print(f"[dim]📎 Context-loaded: {f}[/dim]")
         
         return text, loaded_files
 
@@ -238,8 +353,16 @@ class RichSessionShell:
         home = os.path.expanduser("~")
         short_cwd = "~" + cwd[len(home):] if cwd.startswith(home) else cwd
 
+        # Add autoexec badge if enabled
+        badges = []
+        if self.autoexec_enabled:
+            badges.append("[bold yellow]⚡AUTOEXEC[/bold yellow]")
+        
         left = f"[bold]LinkoWiki Code[/bold] [dim]Session[/dim]"
-        right = f"[dim]{provider_id} (1x)[/dim]"
+        right_parts = [f"[dim]{provider_id} (1x)[/dim]"]
+        if badges:
+            right_parts.extend(badges)
+        right = " ".join(right_parts)
         table.add_row(left, right)
 
         if git_info["branch"]:
@@ -352,9 +475,13 @@ class RichSessionShell:
             ("/files", "List attached files"),
             ("/clear", "Clear conversation"),
             ("/search <text>", "Search conversation history"),
+            ("/autoexec [on|off]", "Toggle auto-execute mode (no confirmation needed)"),
+            ("/retry", "Retry last AI request"),
             ("/stream on/off", "Enable/disable streaming output"),
             ("/exit", "Exit shell"),
             ("@<file>", "Auto-load file (e.g., @src/main.py)"),
+            ("@*.py", "Load files with glob pattern (e.g., @src/*.py)"),
+            ("@examples/", "Load all files in directory"),
             ("apply", "Apply pending actions"),
             ("reject", "Reject pending actions"),
         ]
@@ -414,22 +541,29 @@ class RichSessionShell:
         self.console.print(panel)
         self.console.print()
 
-    def process_ai_request(self, user_input: str):
+    def process_ai_request(self, user_input: str, is_retry: bool = False):
         """Process AI request with live updates and automatic file loading"""
         self.is_processing = True
+
+        # Store for retry capability
+        if not is_retry:
+            self.last_user_input = user_input
+            self.last_files = self.attached_files.copy()
 
         # Extract and load files automatically
         processed_input, loaded_files = self._extract_and_load_files(user_input)
 
         # Add user message to history
-        self.conversation_history.append({
-            "role": "user",
-            "content": user_input
-        })
+        if not is_retry:
+            self.conversation_history.append({
+                "role": "user",
+                "content": user_input
+            })
 
         try:
             # Add to session history
-            add_history(user_input)
+            if not is_retry:
+                add_history(user_input)
 
             # Merge loaded files with session files
             all_files = {**self.session.get("files", {}), **self.attached_files}
@@ -441,13 +575,80 @@ class RichSessionShell:
                 # Non-streaming mode
                 self._process_ai_standard(processed_input, all_files)
 
+        except FileNotFoundError as e:
+            self._handle_file_not_found_error(str(e))
+        except PermissionError as e:
+            self.console.print(f"[red]❌ Permission denied:[/red] {str(e)}")
+            self.console.print("[dim]Check file permissions and try again[/dim]")
+        except ConnectionError as e:
+            self._handle_connection_error(str(e))
         except Exception as e:
-            self.console.print(f"[red]Error:[/red] {str(e)}")
-            import traceback
-            self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
+            error_msg = str(e)
+            if "api" in error_msg.lower() and "key" in error_msg.lower():
+                self._handle_api_key_error()
+            elif "rate" in error_msg.lower() and "limit" in error_msg.lower():
+                self._handle_rate_limit_error()
+            else:
+                self.console.print(f"[red]❌ Error:[/red] {error_msg}")
+                self.console.print("[dim]Use /retry to try again[/dim]")
 
         finally:
             self.is_processing = False
+
+    def _handle_file_not_found_error(self, error_msg: str):
+        """Handle file not found errors with suggestions"""
+        self.console.print(f"[red]❌ File not found[/red]")
+        
+        # Try to extract filename from error
+        import re
+        match = re.search(r"['\"](.*?)['\"]", error_msg)
+        if match:
+            filename = match.group(1)
+            # Find similar files
+            try:
+                result = subprocess.run(
+                    ["git", "ls-files"],
+                    capture_output=True,
+                    text=True,
+                    cwd=BASE_DIR,
+                    timeout=2
+                )
+                if result.returncode == 0:
+                    all_files = result.stdout.strip().split('\n')
+                    similar = get_close_matches(filename, all_files, n=5, cutoff=0.5)
+                    if similar:
+                        self.console.print("\n[yellow]💡 Did you mean one of these?[/yellow]")
+                        for f in similar:
+                            self.console.print(f"   [cyan]@{f}[/cyan]")
+            except:
+                pass
+
+    def _handle_connection_error(self, error_msg: str):
+        """Handle connection errors with retry option"""
+        self.console.print(f"[red]❌ Connection error:[/red] Network unavailable")
+        self.console.print("[yellow]💡 Options:[/yellow]")
+        self.console.print("   1. Check your internet connection")
+        self.console.print("   2. Use [cyan]/retry[/cyan] to try again")
+        self.console.print("   3. Wait a moment and try again")
+
+    def _handle_api_key_error(self):
+        """Handle missing or invalid API key errors"""
+        self.console.print(f"[red]❌ API Key Error[/red]")
+        self.console.print("\n[yellow]💡 How to fix:[/yellow]")
+        self.console.print("   1. Set your API key in environment variables:")
+        self.console.print("      [cyan]export OPENAI_API_KEY='your-key'[/cyan]")
+        self.console.print("      [cyan]export ANTHROPIC_API_KEY='your-key'[/cyan]")
+        self.console.print("   2. Or create a .env file with your keys")
+        self.console.print("   3. Restart the CLI after setting keys")
+
+    def _handle_rate_limit_error(self):
+        """Handle rate limit errors"""
+        self.console.print(f"[red]❌ Rate Limit Exceeded[/red]")
+        self.console.print("\n[yellow]💡 What to do:[/yellow]")
+        self.console.print("   1. Wait a few minutes before trying again")
+        self.console.print("   2. Use [cyan]/retry[/cyan] after waiting")
+        self.console.print("   3. Consider upgrading your API plan")
+        self.console.print("\n[dim]Typical wait time: 1-5 minutes[/dim]")
 
     def _process_ai_standard(self, user_input: str, all_files: Dict[str, str]):
         """Process AI request without streaming"""
@@ -486,6 +687,17 @@ class RichSessionShell:
                 self._display_actions(result.actions)
                 self.session["pending_actions"] = [a.dict() for a in result.actions]
                 save_session(self.session)
+                
+                # Auto-execute if enabled (but skip DELETE actions)
+                if self.autoexec_enabled:
+                    # Check if any actions are DELETE
+                    has_delete = any(a.type.upper() == "DELETE" for a in result.actions)
+                    
+                    if has_delete:
+                        self.console.print("\n[yellow]⚠ DELETE action detected - confirmation required even in autoexec mode[/yellow]")
+                    else:
+                        self.console.print("\n[bold yellow]⚡ AUTOEXEC:[/bold yellow] Executing actions automatically...")
+                        self._execute_pending_actions()
 
     def _process_ai_streaming(self, user_input: str, all_files: Dict[str, str]):
         """Process AI request with streaming output
@@ -616,6 +828,52 @@ class RichSessionShell:
         )
         self.console.print(panel)
 
+    def _execute_pending_actions(self):
+        """Execute pending actions from session"""
+        if not self.session.get("pending_actions"):
+            self.console.print("[dim]No pending actions to execute[/dim]")
+            return
+        
+        actions = self.session["pending_actions"]
+        self.console.print(f"\n[bold green]Executing {len(actions)} action(s)...[/bold green]")
+        
+        for action_dict in actions:
+            action_type = action_dict.get("type", "").upper()
+            path = action_dict.get("path", "")
+            content = action_dict.get("content", "")
+            
+            file_path = WIKI_ROOT / path if not path.startswith('/') else Path(path)
+            
+            try:
+                if action_type == "WRITE":
+                    file_path.parent.mkdir(parents=True, exist_ok=True)
+                    file_path.write_text(content, encoding='utf-8')
+                    self.console.print(f"[green]✓[/green] Written: {path}")
+                    
+                elif action_type == "EDIT":
+                    if file_path.exists():
+                        file_path.write_text(content, encoding='utf-8')
+                        self.console.print(f"[green]✓[/green] Edited: {path}")
+                    else:
+                        self.console.print(f"[yellow]⚠[/yellow] File not found, creating: {path}")
+                        file_path.parent.mkdir(parents=True, exist_ok=True)
+                        file_path.write_text(content, encoding='utf-8')
+                        
+                elif action_type == "DELETE":
+                    if file_path.exists():
+                        file_path.unlink()
+                        self.console.print(f"[green]✓[/green] Deleted: {path}")
+                    else:
+                        self.console.print(f"[dim]File already deleted: {path}[/dim]")
+                        
+            except Exception as e:
+                self.console.print(f"[red]✗[/red] Failed to {action_type.lower()} {path}: {str(e)}")
+        
+        # Clear pending actions
+        self.session["pending_actions"] = []
+        save_session(self.session)
+        self.console.print("\n[bold green]✓ All actions completed[/bold green]")
+
     def run(self):
         """Run the interactive shell"""
         # Load or create session
@@ -721,6 +979,49 @@ class RichSessionShell:
                 if user_input.startswith("/search "):
                     query = user_input[8:].strip()
                     self.search_conversation(query)
+                    continue
+                
+                # /autoexec command
+                if user_input.startswith("/autoexec"):
+                    arg = user_input[9:].strip().lower()
+                    if arg == "on":
+                        self.autoexec_enabled = True
+                        self.console.print("[green]✓[/green] [bold yellow]⚡ AUTOEXEC enabled[/bold yellow] - Actions will execute automatically")
+                        self.console.print("[dim]Note: DELETE actions will still require confirmation[/dim]")
+                    elif arg == "off":
+                        self.autoexec_enabled = False
+                        self.console.print("[green]✓[/green] AUTOEXEC disabled - Manual confirmation required")
+                    elif arg == "":
+                        status = "[bold yellow]ON[/bold yellow]" if self.autoexec_enabled else "[dim]OFF[/dim]"
+                        self.console.print(f"[cyan]AUTOEXEC status:[/cyan] {status}")
+                    else:
+                        self.console.print("[red]Usage: /autoexec [on|off][/red]")
+                    continue
+                
+                # /retry command
+                if user_input == "/retry":
+                    if hasattr(self, 'last_user_input') and self.last_user_input:
+                        self.console.print("[cyan]🔄 Retrying last request...[/cyan]")
+                        # Restore previous file state
+                        if hasattr(self, 'last_files'):
+                            self.attached_files = self.last_files.copy()
+                        self.process_ai_request(self.last_user_input, is_retry=True)
+                    else:
+                        self.console.print("[dim]No previous request to retry[/dim]")
+                    continue
+                
+                # apply/reject commands
+                if user_input == "apply":
+                    self._execute_pending_actions()
+                    continue
+                
+                if user_input == "reject":
+                    if self.session.get("pending_actions"):
+                        self.session["pending_actions"] = []
+                        save_session(self.session)
+                        self.console.print("[yellow]✓[/yellow] Pending actions rejected")
+                    else:
+                        self.console.print("[dim]No pending actions to reject[/dim]")
                     continue
 
                 # AI request
