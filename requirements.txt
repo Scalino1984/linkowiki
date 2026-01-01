@@ -15,5 +15,15 @@ pycld2
 colorama
 pyyaml
 python-Levenshtein
+pydantic-ai
 pytest
 black
+openai
+jsonschema
+anthropic
+pydantic
+fastapi
+uvicorn
+httpx
+markdown
+python-multipart

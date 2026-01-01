@@ -1,0 +1,112 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["providers", "default_provider"],
+  "properties": {
+    "providers": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "provider", "model", "reasoning", "env_key", "default_settings"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9-]+$",
+            "description": "Unique provider identifier"
+          },
+          "provider": {
+            "type": "string",
+            "enum": ["openai", "anthropic"],
+            "description": "Provider type"
+          },
+          "model": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Model name"
+          },
+          "api_base": {
+            "type": "string",
+            "format": "uri",
+            "description": "API base URL"
+          },
+          "reasoning": {
+            "type": "boolean",
+            "description": "Whether this is a reasoning model"
+          },
+          "env_key": {
+            "type": "string",
+            "pattern": "^[A-Z_]+$",
+            "description": "Environment variable for API key"
+          },
+          "default_settings": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "reasoning_effort": {
+                "type": "string",
+                "enum": ["low", "medium", "high"]
+              },
+              "temperature": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 2
+              },
+              "top_p": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "max_tokens": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          },
+          "description": {
+            "type": "string",
+            "description": "Human-readable description"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {"reasoning": {"const": true}}
+            },
+            "then": {
+              "properties": {
+                "default_settings": {
+                  "required": ["reasoning_effort"],
+                  "not": {
+                    "anyOf": [
+                      {"required": ["temperature"]},
+                      {"required": ["top_p"]}
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {"reasoning": {"const": false}}
+            },
+            "then": {
+              "properties": {
+                "default_settings": {
+                  "not": {
+                    "required": ["reasoning_effort"]
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "default_provider": {
+      "type": "string",
+      "description": "ID of the default provider"
+    }
+  }
+}

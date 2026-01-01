@@ -1,0 +1,54 @@
+name: PydanticAI v2 Conformance
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  validate-and-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install jsonschema pydantic pydantic-ai
+    
+    - name: Validate providers.json schema
+      run: |
+        python tools/validate_providers.py
+    
+    - name: Run PydanticAI v2 conformance tests
+      run: |
+        python tests/test_pydantic_ai_conformance.py
+    
+    - name: Check for configuration issues
+      run: |
+        # Ensure no reasoning models have temperature
+        if grep -A 10 '"reasoning": true' etc/providers.json | grep -q '"temperature"'; then
+          echo "ERROR: Reasoning model has temperature setting"
+          exit 1
+        fi
+        
+        # Ensure no non-reasoning models have reasoning_effort
+        if grep -B 5 '"reasoning": false' etc/providers.json | grep -q '"reasoning_effort"'; then
+          echo "ERROR: Non-reasoning model has reasoning_effort setting"
+          exit 1
+        fi
+        
+        echo "✓ Configuration checks passed"
+    
+    - name: Summary
+      if: success()
+      run: |
+        echo "::notice::✓ All PydanticAI v2 conformance checks passed"

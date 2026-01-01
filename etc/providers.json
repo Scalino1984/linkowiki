@@ -1,0 +1,77 @@
+{
+  "providers": [
+    {
+      "id": "openai-gpt5-reasoning",
+      "provider": "openai",
+      "model": "gpt-5",
+      "api_base": "https://api.openai.com/v1",
+      "reasoning": true,
+      "env_key": "OPENAI_API_KEY",
+      "default_settings": {
+        "reasoning_effort": "medium"
+      },
+      "description": "GPT-5 Reasoning - Tiefe Analyse und strukturierte Problemlösung"
+    },
+    {
+      "id": "openai-gpt5-text",
+      "provider": "openai",
+      "model": "gpt-5",
+      "api_base": "https://api.openai.com/v1",
+      "reasoning": false,
+      "env_key": "OPENAI_API_KEY",
+      "default_settings": {
+        "temperature": 0.25
+      },
+      "description": "GPT-5 Text - Standardmodell für allgemeine Aufgaben"
+    },
+    {
+      "id": "openai-gpt5-mini-text",
+      "provider": "openai",
+      "model": "gpt-5-mini",
+      "api_base": "https://api.openai.com/v1",
+      "reasoning": false,
+      "env_key": "OPENAI_API_KEY",
+      "default_settings": {
+        "temperature": 0.25
+      },
+      "description": "GPT-5 Mini - Effizient für Bulk-Operationen und einfache Tasks"
+    },
+    {
+      "id": "openai-gpt5-nano-text",
+      "provider": "openai",
+      "model": "gpt-5-nano",
+      "api_base": "https://api.openai.com/v1",
+      "reasoning": false,
+      "env_key": "OPENAI_API_KEY",
+      "default_settings": {
+        "temperature": 0.2
+      },
+      "description": "GPT-5 Nano - Schnell und kostengünstig für Tags und Metadaten"
+    },
+    {
+      "id": "anthropic-claude-3-5-sonnet",
+      "provider": "anthropic",
+      "model": "claude-3-5-sonnet-20241022",
+      "api_base": "https://api.anthropic.com",
+      "reasoning": false,
+      "env_key": "ANTHROPIC_API_KEY",
+      "default_settings": {
+        "temperature": 0.25
+      },
+      "description": "Claude 3.5 Sonnet - Balanciert und vielseitig"
+    },
+    {
+      "id": "anthropic-claude-3-haiku",
+      "provider": "anthropic",
+      "model": "claude-3-haiku-20240307",
+      "api_base": "https://api.anthropic.com",
+      "reasoning": false,
+      "env_key": "ANTHROPIC_API_KEY",
+      "default_settings": {
+        "temperature": 0.2
+      },
+      "description": "Claude 3 Haiku - Schnell und effizient"
+    }
+  ],
+  "default_provider": "openai-gpt5-text"
+}

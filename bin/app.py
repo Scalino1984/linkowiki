@@ -77,6 +77,13 @@ app.jinja_loader = jinja2.ChoiceLoader(
     [app.jinja_loader, jinja2.FileSystemLoader(CONFIG["path.internal.templates"])]
 )
 
+# AI integration
+try:
+    from bin.ai_endpoint import register_ai
+    register_ai(app)
+except Exception:
+    pass  # AI endpoint optional
+
 LIMITS = Limits()
 
 PLAIN_TEXT_AGENTS = [
