@@ -223,7 +223,7 @@ class RichSessionShell:
                 # Try get_close_matches as fallback
                 close = get_close_matches(pattern, all_files, n=3, cutoff=0.6)
                 return close
-        except:
+        except (subprocess.SubprocessError, subprocess.TimeoutExpired):
             pass
         
         return []
@@ -328,7 +328,7 @@ class RichSessionShell:
                 branch = f"{branch}*" if is_dirty else branch
 
             return {"branch": branch}
-        except:
+        except (subprocess.SubprocessError, subprocess.TimeoutExpired, FileNotFoundError):
             return {"branch": ""}
 
     def _create_header_panel(self) -> Panel:

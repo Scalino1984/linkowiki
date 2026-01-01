@@ -68,5 +68,5 @@ def list_files(pattern: str = "*") -> List[str]:
         files.sort()
         return files[:50]  # Limit to 50 files
         
-    except Exception as e:
+    except (OSError, PermissionError, ValueError) as e:
         return [f"Error listing files: {str(e)}"]

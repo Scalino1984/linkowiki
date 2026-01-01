@@ -90,7 +90,7 @@ def get_recent_changes(limit: int = 10) -> List[Dict[str, Any]]:
             content = file_path.read_text(encoding='utf-8')
             lines = content.split('\n')
             preview = '\n'.join(lines[:3]) if len(lines) > 3 else content
-        except:
+        except (UnicodeDecodeError, IOError):
             preview = ""
         
         from datetime import datetime

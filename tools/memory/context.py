@@ -27,7 +27,7 @@ class ContextMemory:
                 self.recent_actions = data.get('recent_actions', [])[-50:]  # Keep last 50
                 self.user_preferences = data.get('user_preferences', {})
                 self.common_patterns = data.get('common_patterns', {})
-            except Exception:
+            except (json.JSONDecodeError, UnicodeDecodeError, IOError) as e:
                 # If loading fails, start fresh
                 pass
     
@@ -41,7 +41,7 @@ class ContextMemory:
                 'last_updated': datetime.now().isoformat()
             }
             MEMORY_FILE.write_text(json.dumps(data, indent=2), encoding='utf-8')
-        except Exception:
+        except (json.JSONEncodeError, PermissionError, IOError) as e:
             pass  # Fail silently to not interrupt user workflow
     
     def remember_action(self, action: Dict[str, Any], prompt: str):
