@@ -1,0 +1,11 @@
+{
+  "id": "2026-01-01T15:36:45",
+  "write": true,
+  "cwd": "/home/astier/Projekte/linko-wiki",
+  "started_by": "astier",
+  "history": [],
+  "files": {},
+  "changes": [],
+  "pending_actions": [],
+  "active_provider_id": "openai-gpt5-text"
+}

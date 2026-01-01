@@ -1,0 +1,14 @@
+127.0.0.1 - - [2026-01-01 11:58:17] "GET / HTTP/1.1" 200 25622 0.002789
+127.0.0.1 - - [2026-01-01 11:58:29] "GET /ts HTTP/1.1" 200 235 0.007579
+127.0.0.1 - - [2026-01-01 11:58:36] "GET /tee HTTP/1.1" 200 242 0.002251
+127.0.0.1 - - [2026-01-01 12:01:23] "GET / HTTP/1.1" 200 25622 0.000613
+127.0.0.1 - - [2026-01-01 12:01:40] "GET / HTTP/1.1" 200 25622 0.000546
+127.0.0.1 - - [2026-01-01 12:03:38] "GET /curl HTTP/1.1" 200 247 0.002407
+127.0.0.1 - - [2026-01-01 12:04:42] "GET /curl HTTP/1.1" 200 247 0.002132
+connectionpool.py:1049: Starting new HTTPS connection (1): cheat.sh:443
+connectionpool.py:544: https://cheat.sh:443 "GET /curl/test?add_comments=True HTTP/1.1" 200 9091
+127.0.0.1 - - [2026-01-01 12:04:47] "GET /curl+test HTTP/1.1" 200 9210 0.131752
+connectionpool.py:1049: Starting new HTTPS connection (1): cheat.sh:443
+connectionpool.py:544: https://cheat.sh:443 "GET /curl/test?add_comments=True HTTP/1.1" 200 9091
+127.0.0.1 - - [2026-01-01 12:05:54] "GET /curl+test HTTP/1.1" 200 9210 0.268628
+127.0.0.1 - - [2026-01-01 13:35:03] "GET / HTTP/1.1" 200 25622 0.013476

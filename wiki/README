@@ -1,0 +1,8 @@
+# Linko-Wiki
+
+Interne Wiki- und Tool-Struktur für Automatisierung, Sessions und KI-gestützte Assistenz.
+
+## Struktur
+- tools/: Verwaltungs- und Automationswerkzeuge
+- wiki/: Dokumentation
+- .linkowiki-session.json: Laufzeit-Sessiondaten
