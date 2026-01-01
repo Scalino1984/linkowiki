@@ -1,6 +1,6 @@
 # tools/ai/agent_factory.py
 """Agent factory for creating PydanticAI agents - STRICT v2 CONFORMANCE"""
-from typing import Type, TypeVar, Optional
+from typing import Type, TypeVar, Optional, Sequence, Callable, Any
 from pydantic import BaseModel
 from pydantic_ai import Agent
 
@@ -26,7 +26,8 @@ class AgentFactory:
         provider_id: str,
         output_type: Type[OutputT],
         system_prompt: str,
-        custom_settings: Optional[dict] = None
+        custom_settings: Optional[dict] = None,
+        tools: Sequence[Callable] = ()
     ) -> Agent[None, OutputT]:
         """
         Create an agent with STRICT PydanticAI v2 configuration.
@@ -36,6 +37,7 @@ class AgentFactory:
             output_type: Pydantic model for structured output
             system_prompt: System prompt for the agent
             custom_settings: Optional custom model settings (overrides defaults)
+            tools: Sequence of tool functions to register with the agent
         
         Returns:
             Configured Agent instance
@@ -66,14 +68,15 @@ class AgentFactory:
         else:
             raise ValueError(f"Unsupported provider: {provider.provider}")
         
-        # Create agent with validated settings
+        # Create agent with validated settings and tools
         # For reasoning models: model_settings contains ONLY reasoning_effort
         # For non-reasoning: model_settings contains ONLY temperature/top_p/max_tokens
         agent = Agent(
             model=model_name,
             output_type=output_type,
             system_prompt=system_prompt,
-            model_settings=settings
+            model_settings=settings,
+            tools=tools
         )
         
         return agent
@@ -94,7 +97,8 @@ def create_agent_for_session(
     session: dict,
     output_type: Type[OutputT],
     system_prompt: str,
-    custom_settings: Optional[dict] = None
+    custom_settings: Optional[dict] = None,
+    tools: Sequence[Callable] = ()
 ) -> Agent[None, OutputT]:
     """
     Create agent using provider from session state.
@@ -104,6 +108,7 @@ def create_agent_for_session(
         output_type: Output type for agent
         system_prompt: System prompt
         custom_settings: Optional custom model settings
+        tools: Sequence of tool functions to register with the agent
     
     Returns:
         Configured agent per PydanticAI v2 rules
@@ -119,7 +124,8 @@ def create_agent_for_session(
         provider_id=provider_id,
         output_type=output_type,
         system_prompt=system_prompt,
-        custom_settings=custom_settings
+        custom_settings=custom_settings,
+        tools=tools
     )
 
 
@@ -127,7 +133,8 @@ def create_agent_for_task(
     task_type: str,
     output_type: Type[OutputT],
     system_prompt: str,
-    custom_settings: Optional[dict] = None
+    custom_settings: Optional[dict] = None,
+    tools: Sequence[Callable] = ()
 ) -> Agent[None, OutputT]:
     """
     Create agent using automatic routing based on task type.
@@ -137,6 +144,7 @@ def create_agent_for_task(
         output_type: Output type for agent
         system_prompt: System prompt
         custom_settings: Optional custom model settings
+        tools: Sequence of tool functions to register with the agent
     
     Returns:
         Configured agent routed to appropriate model
@@ -149,6 +157,7 @@ def create_agent_for_task(
         provider_id=provider_id,
         output_type=output_type,
         system_prompt=system_prompt,
-        custom_settings=custom_settings
+        custom_settings=custom_settings,
+        tools=tools
     )
 

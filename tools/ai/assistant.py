@@ -4,6 +4,16 @@ from pydantic_ai import Agent
 from tools.ai.agent_factory import create_agent_for_session
 from tools.ai.agents.wiki_agent import get_wiki_system_prompt
 
+# Import tools
+from tools.ai.tools import (
+    search_wiki,
+    get_wiki_structure,
+    get_recent_changes,
+    read_file,
+    list_files,
+    git_status
+)
+
 WIKI_ROOT = Path("wiki")
 
 
@@ -27,7 +37,7 @@ class AIResult(BaseModel):
 
 def run_ai(prompt: str, files: dict, session: dict = None):
     """
-    Run AI with current session's provider.
+    Run AI with current session's provider and registered tools.
     Agent is created per request using session's active_provider_id.
     
     Args:
@@ -60,11 +70,19 @@ def run_ai(prompt: str, files: dict, session: dict = None):
     
     full_prompt = f"{context}\nAUFGABE:\n{prompt}"
     
-    # Create agent per request using session's provider
+    # Create agent per request using session's provider with tools
     agent = create_agent_for_session(
         session=session,
         output_type=AIResult,
-        system_prompt=get_wiki_system_prompt()
+        system_prompt=get_wiki_system_prompt(),
+        tools=[
+            search_wiki,
+            get_wiki_structure,
+            get_recent_changes,
+            read_file,
+            list_files,
+            git_status
+        ]
     )
     
     result = agent.run_sync(full_prompt)
@@ -106,11 +124,19 @@ def run_ai_streaming(prompt: str, files: dict, session: dict = None):
     
     full_prompt = f"{context}\nAUFGABE:\n{prompt}"
     
-    # Create agent per request using session's provider
+    # Create agent per request using session's provider with tools
     agent = create_agent_for_session(
         session=session,
         output_type=AIResult,
-        system_prompt=get_wiki_system_prompt()
+        system_prompt=get_wiki_system_prompt(),
+        tools=[
+            search_wiki,
+            get_wiki_structure,
+            get_recent_changes,
+            read_file,
+            list_files,
+            git_status
+        ]
     )
     
     # Return the stream context manager
