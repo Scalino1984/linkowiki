@@ -47,6 +47,7 @@ except ImportError:
 # Project imports
 from tools.session.manager import load_session, start_session, add_history, save_session
 from tools.ai.assistant import run_ai, run_ai_streaming, Action
+from tools.memory.context import ContextMemory
 
 
 class ProfessionalCompleter(Completer):
@@ -147,6 +148,7 @@ class RichSessionShell:
         self.streaming_enabled = False  # Disable streaming by default due to structured output requirements
         self.last_displayed_turn = -1  # Track which turn was last displayed to avoid duplicates
         self.autoexec_enabled = False  # Auto-execute actions without confirmation
+        self.memory = ContextMemory()  # Contextual memory system
 
         # Terminal info
         self.update_terminal_size()
@@ -550,6 +552,11 @@ class RichSessionShell:
             self.last_user_input = user_input
             self.last_files = self.attached_files.copy()
 
+        # Check for repeated patterns in memory
+        pattern_hint = self.memory.detect_repeated_pattern(user_input)
+        if pattern_hint:
+            self.console.print(f"[dim]💡 {pattern_hint}[/dim]")
+
         # Extract and load files automatically
         processed_input, loaded_files = self._extract_and_load_files(user_input)
 
@@ -685,6 +692,11 @@ class RichSessionShell:
             # Show actions if any
             if result.actions:
                 self._display_actions(result.actions)
+                
+                # Remember actions in memory
+                for action in result.actions:
+                    self.memory.remember_action(action.dict(), user_input)
+                
                 self.session["pending_actions"] = [a.dict() for a in result.actions]
                 save_session(self.session)
                 
@@ -698,6 +710,12 @@ class RichSessionShell:
                     else:
                         self.console.print("\n[bold yellow]⚡ AUTOEXEC:[/bold yellow] Executing actions automatically...")
                         self._execute_pending_actions()
+                        
+                        # Show proactive suggestions after auto-execution
+                        self._show_proactive_suggestions(result.actions, user_input)
+            else:
+                # Show suggestions even without actions
+                self._show_proactive_suggestions([], user_input)
 
     def _process_ai_streaming(self, user_input: str, all_files: Dict[str, str]):
         """Process AI request with streaming output
@@ -873,6 +891,99 @@ class RichSessionShell:
         self.session["pending_actions"] = []
         save_session(self.session)
         self.console.print("\n[bold green]✓ All actions completed[/bold green]")
+
+    def _show_proactive_suggestions(self, actions: List[Action], prompt: str):
+        """Generate and display proactive suggestions based on context"""
+        suggestions = []
+        
+        # Check wiki structure for suggestions
+        try:
+            from tools.ai.tools.wiki_tools import get_wiki_structure, WIKI_ROOT
+            
+            # After wiki creation - suggest related topics
+            if actions and any(a.type.upper() == "WRITE" for a in actions):
+                created_paths = [a.path for a in actions if a.type.upper() == "WRITE"]
+                
+                # Extract topics and categories
+                for path in created_paths:
+                    parts = path.split('/')
+                    if len(parts) > 1:
+                        category = parts[0]
+                        
+                        # Suggest related topics based on category
+                        related_topics = {
+                            'docker': ['kubernetes', 'docker-compose', 'containerization'],
+                            'kubernetes': ['helm', 'kubectl', 'k8s-networking'],
+                            'python': ['pip', 'virtualenv', 'pytest'],
+                            'linux': ['bash', 'systemd', 'networking'],
+                            'git': ['github', 'gitlab', 'git-workflow']
+                        }
+                        
+                        if category in related_topics:
+                            for topic in related_topics[category]:
+                                topic_path = f"{category}/{topic}"
+                                if not (WIKI_ROOT / topic_path).exists():
+                                    suggestions.append({
+                                        'label': f"Erstelle '{topic}' Wiki-Eintrag",
+                                        'description': f"Verwandtes Thema zu {category}",
+                                        'type': 'related_topic'
+                                    })
+                                    if len(suggestions) >= 2:
+                                        break
+            
+            # Check if wiki is empty
+            wiki_structure = get_wiki_structure()
+            if wiki_structure['total_entries'] == 0:
+                suggestions.append({
+                    'label': 'Wiki-Struktur vorschlagen',
+                    'description': 'Ich kann eine Grundstruktur mit häufigen Kategorien erstellen',
+                    'type': 'structure'
+                })
+            
+            # Check for missing cross-references
+            if actions:
+                for action in actions:
+                    if action.content and action.type.upper() in ["WRITE", "EDIT"]:
+                        # Find mentions of other topics
+                        content_lower = action.content.lower()
+                        potential_topics = ['docker', 'kubernetes', 'python', 'linux', 'git', 'aws', 'azure']
+                        
+                        for topic in potential_topics:
+                            if topic in content_lower and topic not in action.path:
+                                topic_exists = (WIKI_ROOT / topic).exists() or any(
+                                    topic in str(p) for p in WIKI_ROOT.rglob('*') if p.is_file()
+                                )
+                                if not topic_exists:
+                                    suggestions.append({
+                                        'label': f"Erstelle '{topic}' Eintrag",
+                                        'description': f"Wird in {action.path} erwähnt",
+                                        'type': 'cross_reference'
+                                    })
+                                    break  # Only suggest one cross-reference
+        
+        except Exception:
+            pass  # Fail silently - suggestions are optional
+        
+        # Display suggestions if any
+        if suggestions:
+            self.console.print("\n[bold cyan]💡 Vorschläge:[/bold cyan]")
+            
+            table = Table(show_header=False, box=box.SIMPLE, padding=(0, 2))
+            table.add_column(style="yellow", width=6)
+            table.add_column(style="white")
+            table.add_column(style="dim")
+            
+            for idx, suggestion in enumerate(suggestions[:3], 1):  # Max 3 suggestions
+                table.add_row(
+                    f"[{idx}]",
+                    suggestion['label'],
+                    suggestion.get('description', '')
+                )
+            
+            table.add_row("[0]", "Überspringen", "")
+            
+            self.console.print(table)
+            self.console.print()
 
     def run(self):
         """Run the interactive shell"""
